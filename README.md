@@ -2,6 +2,22 @@
 
 Interactive 3D model of a Kerr (spinning) black hole using the geodesic radii from Bardeen (1973) and Teo (2003), with **M = 1** and dimensionless spin **χ = a/M**.
 
+## Run it
+
+**On GitHub Pages:** [https://iamfrutrated.github.io/kerr-black-hole/](https://iamfrutrated.github.io/kerr-black-hole/)
+
+A `.canvas.tsx` file only runs inside Cursor. GitHub does not execute it. The live site is `index.html` in this repo.
+
+**Locally:** open `index.html` in a browser, or from this folder run:
+
+```bash
+python3 -m http.server 8000
+```
+
+Then visit `http://localhost:8000`.
+
+**In Cursor:** open `kerr-black-hole.canvas.tsx` beside the chat.
+
 ## Surfaces
 
 | Surface | Meaning | Formula |
@@ -13,9 +29,7 @@ Interactive 3D model of a Kerr (spinning) black hole using the geodesic radii fr
 
 At **χ = 0** (Schwarzschild): horizon 2M, one photon sphere at 3M, shadow radius **3√3 M ≈ 5.196 M**. Near **χ = 1** (extremal Kerr): rh = rPro = M, rRetro = 4M.
 
-## Open the model
-
-This is a [Cursor Canvas](https://cursor.com) (`.canvas.tsx`). In Cursor, open `kerr-black-hole.canvas.tsx` beside the chat.
+## Controls
 
 - Drag to orbit, scroll to zoom
 - Spin slider and Schwarzschild / extremal presets
