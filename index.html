@@ -59,9 +59,10 @@
       background: #0c0d10;
       cursor: grab;
       touch-action: none;
+      overscroll-behavior: contain;
     }
     .viewport.dragging { cursor: grabbing; }
-    canvas#scene { display: block; width: 100%; height: 100%; }
+    canvas#scene { display: block; position: absolute; inset: 0; }
     canvas#gizmo {
       position: absolute;
       top: 10px;
@@ -166,6 +167,8 @@
   <script>
     const M = 1;
     const CHI_MAX = 0.998;
+    const REF_DIST = 22;
+    const FIT_RADIUS = 10.2;
     const colors = {
       cyan: "#3db8d8",
       orange: "#e08a3c",
@@ -180,10 +183,13 @@
 
     const state = {
       chi: 0.8,
-      cam: { yaw: 0.55, pitch: 0.38, dist: 22 },
-      dragging: false,
+      cam: { yaw: 0.55, pitch: 0.38, zoom: 1 },
       drag: null,
       phase: 0,
+      dirty: true,
+      geom: null,
+      cssW: 0,
+      cssH: 0,
       layers: { horizon: true, pro: true, retro: true, shadow: true, photons: true, axis: true, rotate: true },
     };
 
@@ -207,62 +213,159 @@
     function teoEta(r, a) {
       return (r ** 3 * (4 * a * a * M - r * (r - 3 * M) ** 2)) / (a * a * (r - M) ** 2);
     }
+
+    // Critical curve on the observer's sky. The r-range of valid spherical
+    // photon orbits is found by root-finding and sampled with cosine spacing so
+    // both ends of the D close at β = 0 instead of ending in a straight chord.
     function shadowSilhouette(chi, thetaObs) {
-      const th = clamp(thetaObs, 0.12, Math.PI - 0.12);
-      if (chi < 0.02) {
-        const R = 3 * Math.sqrt(3) * M;
+      const th = clamp(thetaObs, 0.05, Math.PI - 0.05);
+      const n = 128;
+      const circle = (R) => {
         const pts = [];
-        for (let i = 0; i <= 72; i++) {
-          const ang = (i / 72) * Math.PI * 2;
+        for (let i = 0; i <= n; i++) {
+          const ang = (i / n) * Math.PI * 2;
           pts.push({ a: R * Math.cos(ang), b: R * Math.sin(ang) });
         }
         return pts;
-      }
+      };
+      if (chi < 1e-3) return circle(3 * Math.sqrt(3) * M);
       const spin = chi * M;
-      const sinT = Math.sin(th);
-      const cotT = Math.cos(th) / sinT;
-      const r1 = rPro(chi) + 1e-4;
-      const r2 = rRetro(chi) - 1e-4;
-      const upper = [];
-      const lower = [];
-      for (let i = 0; i <= 72; i++) {
-        const r = r1 + (r2 - r1) * (i / 72);
+      const sinT = Math.sin(th), cosT = Math.cos(th);
+      const cot2 = (cosT * cosT) / (sinT * sinT);
+      const disc = (r) => {
         const xi = teoXi(r, spin);
-        const eta = teoEta(r, spin);
-        const disc = eta + spin * spin * Math.cos(th) ** 2 - xi * xi * cotT * cotT;
-        if (disc < 0) continue;
-        const alpha = -xi / sinT;
-        const beta = Math.sqrt(disc);
+        return teoEta(r, spin) + spin * spin * cosT * cosT - xi * xi * cot2;
+      };
+      const rLo = rPro(chi), rHi = rRetro(chi);
+      const N = 256;
+      const grid = (i) => rLo + ((rHi - rLo) * i) / N;
+      let iFirst = -1, iLast = -1;
+      for (let i = 0; i <= N; i++) {
+        if (disc(grid(i)) >= 0) {
+          if (iFirst < 0) iFirst = i;
+          iLast = i;
+        }
+      }
+      if (iFirst < 0) return circle(3 * Math.sqrt(3) * M);
+      let rMin = grid(iFirst);
+      if (iFirst > 0) {
+        let lo = grid(iFirst - 1), hi = rMin;
+        for (let k = 0; k < 40; k++) {
+          const mid = 0.5 * (lo + hi);
+          if (disc(mid) >= 0) hi = mid; else lo = mid;
+        }
+        rMin = hi;
+      }
+      let rMax = grid(iLast);
+      if (iLast < N) {
+        let lo = rMax, hi = grid(iLast + 1);
+        for (let k = 0; k < 40; k++) {
+          const mid = 0.5 * (lo + hi);
+          if (disc(mid) >= 0) lo = mid; else hi = mid;
+        }
+        rMax = lo;
+      }
+      const upper = [], lower = [];
+      for (let i = 0; i <= n; i++) {
+        const t = 0.5 * (1 - Math.cos((Math.PI * i) / n));
+        const r = rMin + (rMax - rMin) * t;
+        const alpha = -teoXi(r, spin) / sinT;
+        const beta = Math.sqrt(Math.max(0, disc(r)));
         upper.push({ a: alpha, b: beta });
         lower.push({ a: alpha, b: -beta });
       }
-      if (upper.length < 3) return shadowSilhouette(0, thetaObs);
-      return upper.concat(lower.reverse());
+      lower.reverse();
+      return upper.concat(lower);
+    }
+    let silKey = "", silPts = [];
+    function silhouetteCached(chi, thetaObs) {
+      const key = chi.toFixed(4) + "|" + thetaObs.toFixed(3);
+      if (key !== silKey) {
+        silKey = key;
+        silPts = shadowSilhouette(chi, thetaObs);
+      }
+      return silPts;
     }
     function shadowWidth(chi) {
-      const pts = shadowSilhouette(chi, Math.PI / 2);
-      let minA = Infinity, maxA = -Infinity, maxR = 0;
-      for (const p of pts) {
-        minA = Math.min(minA, p.a);
-        maxA = Math.max(maxA, p.a);
-        maxR = Math.max(maxR, Math.hypot(p.a, p.b));
-      }
+      let maxR = 0;
+      for (const p of shadowSilhouette(chi, Math.PI / 2)) maxR = Math.max(maxR, Math.hypot(p.a, p.b));
       return { radius: maxR };
     }
+
+    // Geometry is built once per spin value; only the camera changes per frame.
+    function wireLines(r, point, layer, ringWidth, ringAlpha) {
+      const lines = [];
+      const meridians = 10, parallels = 8;
+      for (let m = 0; m < meridians; m++) {
+        const phi = (m / meridians) * Math.PI * 2;
+        const pts = [];
+        for (let i = 0; i <= 32; i++) pts.push(point(r, (i / 32) * Math.PI, phi));
+        lines.push({ layer, pts, width: 1, alpha: 0.55 });
+      }
+      for (let p = 1; p < parallels; p++) {
+        if (p * 2 === parallels) continue;
+        const theta = (p / parallels) * Math.PI;
+        const pts = [];
+        for (let i = 0; i <= 48; i++) pts.push(point(r, theta, (i / 48) * Math.PI * 2));
+        lines.push({ layer, pts, width: 1, alpha: 0.4 });
+      }
+      const ring = [];
+      for (let i = 0; i <= 96; i++) ring.push(point(r, Math.PI / 2, (i / 96) * Math.PI * 2));
+      lines.push({ layer, pts: ring, width: ringWidth, alpha: ringAlpha });
+      return lines;
+    }
+    function buildGeometry(chi) {
+      const a = chi * M;
+      const rH = rh(chi), rP = rPro(chi), rR = rRetro(chi);
+      const kerrPoint = (r, th, ph) => kerrCart(r, th, ph, a);
+      const axis = [];
+      for (let i = 0; i <= 8; i++) axis.push({ x: 0, y: 0, z: -7.2 + (14.4 * i) / 8 });
+      const lines = [
+        ...wireLines(rR, kerrPoint, "retro", 2.4, 1),
+        ...wireLines(rP, kerrPoint, "pro", 2.4, 1),
+        ...wireLines(rH, sphereCart, "horizon", 1.4, 0.7),
+        { layer: "axis", pts: axis, width: 1, alpha: 0.7 },
+      ];
+      return { a, rH, rP, rR, lines };
+    }
+
     function toCamera(p, cam) {
       const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
       const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
       const x1 = p.x * cy - p.y * sy;
       const y1 = p.x * sy + p.y * cy;
-      const z1 = p.z;
-      return { x: x1, y: y1 * cp - z1 * sp, z: y1 * sp + z1 * cp };
+      return { x: x1, y: y1 * cp - p.z * sp, z: y1 * sp + p.z * cp };
     }
-    function project(p, cam, w, h) {
-      const c = toCamera(p, cam);
-      const depth = cam.dist - c.y;
-      const persp = cam.dist / Math.max(0.35, depth);
-      const scale = (Math.min(w, h) * 0.4) / 8;
-      return { x: w / 2 + c.x * scale * persp, y: h / 2 - c.z * scale * persp, depth: c.y, behind: depth < 0.2, cam: c };
+    function screenScale(zoom, w, h) {
+      return ((Math.min(w, h) * 0.44) / FIT_RADIUS) * zoom;
+    }
+    function makeTransform(cam, w, h) {
+      const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+      const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+      const k = screenScale(cam.zoom, w, h);
+      const cx = w / 2, cz = h / 2;
+      return (p) => {
+        const x1 = p.x * cy - p.y * sy;
+        const y1 = p.x * sy + p.y * cy;
+        const d = y1 * cp - p.z * sp;
+        const z = y1 * sp + p.z * cp;
+        const persp = 1 / Math.max(0.72, 1 - 0.12 * (d / REF_DIST));
+        return { x: cx + x1 * k * persp, y: cz - z * k * persp, d };
+      };
+    }
+    function addSegments(ctx, pts, front) {
+      let open = false, any = false;
+      for (let i = 1; i < pts.length; i++) {
+        const p = pts[i - 1], q = pts[i];
+        if ((p.d + q.d >= 0) === front) {
+          if (!open) { ctx.moveTo(p.x, p.y); open = true; }
+          ctx.lineTo(q.x, q.y);
+          any = true;
+        } else {
+          open = false;
+        }
+      }
+      return any;
     }
 
     const viewport = document.getElementById("viewport");
@@ -274,20 +377,20 @@
     function resize() {
       const rect = viewport.getBoundingClientRect();
       const dpr = Math.min(2, window.devicePixelRatio || 1);
-      canvas.width = Math.floor(rect.width * dpr);
-      canvas.height = Math.floor(rect.height * dpr);
+      state.cssW = rect.width;
+      state.cssH = rect.height;
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
       canvas.style.width = rect.width + "px";
       canvas.style.height = rect.height + "px";
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      state.cssW = rect.width;
-      state.cssH = rect.height;
+      state.dirty = true;
     }
     window.addEventListener("resize", resize);
     resize();
 
     viewport.addEventListener("pointerdown", (e) => {
       viewport.setPointerCapture(e.pointerId);
-      state.dragging = true;
       viewport.classList.add("dragging");
       state.drag = { x: e.clientX, y: e.clientY, yaw: state.cam.yaw, pitch: state.cam.pitch };
     });
@@ -295,36 +398,50 @@
       if (!state.drag) return;
       state.cam.yaw = state.drag.yaw + (e.clientX - state.drag.x) * 0.008;
       state.cam.pitch = clamp(state.drag.pitch + (e.clientY - state.drag.y) * 0.008, -1.15, 1.15);
+      state.dirty = true;
     });
     const endDrag = () => {
       state.drag = null;
-      state.dragging = false;
       viewport.classList.remove("dragging");
     };
     viewport.addEventListener("pointerup", endDrag);
     viewport.addEventListener("pointercancel", endDrag);
     viewport.addEventListener("wheel", (e) => {
       e.preventDefault();
-      state.cam.dist = clamp(state.cam.dist + e.deltaY * 0.02, 12, 40);
+      e.stopPropagation();
+      let dy = e.deltaY;
+      if (e.deltaMode === 1) dy *= 16;
+      if (e.deltaMode === 2) dy *= 40;
+      state.cam.zoom = clamp(state.cam.zoom * Math.exp(-dy * 0.0018), 0.35, 3.5);
+      state.dirty = true;
     }, { passive: false });
 
     const chiInput = document.getElementById("chi");
     const chiOut = document.getElementById("chiOut");
     function setChi(v) {
       state.chi = clamp(Number(v), 0, CHI_MAX);
+      state.geom = buildGeometry(state.chi);
+      state.dirty = true;
       chiInput.value = String(state.chi);
       chiOut.textContent = state.chi.toFixed(3);
       document.querySelectorAll(".presets button").forEach((b) => {
         b.classList.toggle("active", Math.abs(Number(b.dataset.chi) - state.chi) < 0.015);
       });
-      updateStats();
+      const fmt = (x) => x.toFixed(3) + " M";
+      document.getElementById("vRh").textContent = fmt(rh(state.chi));
+      document.getElementById("vPro").textContent = fmt(rPro(state.chi));
+      document.getElementById("vRetro").textContent = fmt(rRetro(state.chi));
+      document.getElementById("vShadow").textContent = fmt(shadowWidth(state.chi).radius);
     }
     chiInput.addEventListener("input", (e) => setChi(e.target.value));
     document.querySelectorAll(".presets button").forEach((b) => {
       b.addEventListener("click", () => setChi(b.dataset.chi));
     });
     const bind = (id, key) => {
-      document.getElementById(id).addEventListener("change", (e) => { state.layers[key] = e.target.checked; });
+      document.getElementById(id).addEventListener("change", (e) => {
+        state.layers[key] = e.target.checked;
+        state.dirty = true;
+      });
     };
     bind("lHorizon", "horizon");
     bind("lPro", "pro");
@@ -333,108 +450,103 @@
     bind("lPhotons", "photons");
     bind("lAxis", "axis");
     bind("lRotate", "rotate");
+    setChi(0.8);
 
-    function updateStats() {
-      const c = state.chi;
-      const fmt = (x) => x.toFixed(3) + " M";
-      document.getElementById("vRh").textContent = fmt(rh(c));
-      document.getElementById("vPro").textContent = fmt(rPro(c));
-      document.getElementById("vRetro").textContent = fmt(rRetro(c));
-      document.getElementById("vShadow").textContent = fmt(shadowWidth(c).radius);
+    function lineColor(layer) {
+      if (layer === "retro") return colors.orange;
+      if (layer === "pro") return colors.cyan;
+      if (layer === "horizon") return colors.limb;
+      return colors.muted;
     }
-    updateStats();
 
-    function strokePath(pts, cam, w, h, color, width, alpha) {
-      const proj = pts.map((p) => project(p, cam, w, h)).filter((p) => !p.behind);
-      if (proj.length < 2) return;
-      ctx.beginPath();
-      ctx.moveTo(proj[0].x, proj[0].y);
-      for (let i = 1; i < proj.length; i++) ctx.lineTo(proj[i].x, proj[i].y);
-      ctx.strokeStyle = color;
-      ctx.globalAlpha = alpha;
-      ctx.lineWidth = width;
-      ctx.lineJoin = "round";
-      ctx.lineCap = "round";
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
-    function fillPath(pts, cam, w, h, color, alpha, stroke) {
-      const proj = pts.map((p) => project(p, cam, w, h)).filter((p) => !p.behind);
-      if (proj.length < 3) return;
-      ctx.beginPath();
-      ctx.moveTo(proj[0].x, proj[0].y);
-      for (let i = 1; i < proj.length; i++) ctx.lineTo(proj[i].x, proj[i].y);
-      ctx.closePath();
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = color;
-      ctx.fill();
-      if (stroke) {
-        ctx.globalAlpha = 0.9;
-        ctx.strokeStyle = stroke;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
-    }
-    function wireSphere(r, cam, w, h, color, point) {
-      for (let m = 0; m < 10; m++) {
-        const phi = (m / 10) * Math.PI * 2;
-        const pts = [];
-        for (let i = 0; i <= 28; i++) pts.push(point(r, (i / 28) * Math.PI, phi));
-        strokePath(pts, cam, w, h, color, 1, 0.55);
-      }
-      for (let p = 1; p < 8; p++) {
-        const theta = (p / 8) * Math.PI;
-        const pts = [];
-        for (let i = 0; i <= 48; i++) pts.push(point(r, theta, (i / 48) * Math.PI * 2));
-        strokePath(pts, cam, w, h, color, 1, p === 4 ? 0.9 : 0.4);
-      }
-    }
-    function meshSphere(r, cam, w, h, fill, point) {
-      const nTh = 16, nPh = 32;
-      const tris = [];
-      for (let i = 0; i < nTh; i++) {
-        const t0 = (i / nTh) * Math.PI;
-        const t1 = ((i + 1) / nTh) * Math.PI;
-        for (let j = 0; j < nPh; j++) {
-          const p0 = (j / nPh) * Math.PI * 2;
-          const p1 = ((j + 1) / nPh) * Math.PI * 2;
-          const a0 = point(r, t0, p0);
-          const a1 = point(r, t0, p1);
-          const a2 = point(r, t1, p1);
-          const a3 = point(r, t1, p0);
-          const c0 = toCamera(a0, cam);
-          const c1 = toCamera(a1, cam);
-          const c2 = toCamera(a2, cam);
-          const e1x = c1.x - c0.x, e1z = c1.z - c0.z;
-          const e2x = c2.x - c0.x, e2z = c2.z - c0.z;
-          if (e1z * e2x - e1x * e2z <= 0) continue;
-          const q0 = project(a0, cam, w, h);
-          const q1 = project(a1, cam, w, h);
-          const q2 = project(a2, cam, w, h);
-          const q3 = project(a3, cam, w, h);
-          tris.push({ z: (c0.y + c1.y + c2.y) / 3, q0, q1, q2, q3 });
-        }
-      }
-      tris.sort((u, v) => u.z - v.z);
-      ctx.fillStyle = fill;
-      ctx.strokeStyle = fill;
-      ctx.lineWidth = 0.4;
-      for (const t of tris) {
+    function drawScene(w, h) {
+      const cam = state.cam;
+      const layers = state.layers;
+      const geom = state.geom;
+      const tf = makeTransform(cam, w, h);
+      const k = screenScale(cam.zoom, w, h);
+
+      ctx.clearRect(0, 0, w, h);
+
+      if (layers.shadow) {
+        const sil = silhouetteCached(state.chi, Math.PI / 2 - cam.pitch);
         ctx.beginPath();
-        ctx.moveTo(t.q0.x, t.q0.y);
-        ctx.lineTo(t.q1.x, t.q1.y);
-        ctx.lineTo(t.q2.x, t.q2.y);
-        ctx.lineTo(t.q3.x, t.q3.y);
+        for (let i = 0; i < sil.length; i++) {
+          const x = w / 2 + sil[i].a * k, y = h / 2 - sil[i].b * k;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
         ctx.closePath();
+        ctx.globalAlpha = 0.12;
+        ctx.fillStyle = colors.purple;
         ctx.fill();
+        ctx.globalAlpha = 0.95;
+        ctx.strokeStyle = colors.purple;
+        ctx.lineWidth = 2.2;
+        ctx.lineJoin = "round";
         ctx.stroke();
+        ctx.globalAlpha = 1;
       }
-    }
-    function ring(r, n, point) {
-      const pts = [];
-      for (let i = 0; i <= n; i++) pts.push(point(r, Math.PI / 2, (i / n) * Math.PI * 2));
-      return pts;
+
+      const projected = [];
+      for (const line of geom.lines) {
+        if (!layers[line.layer]) continue;
+        projected.push({ line, pts: line.pts.map(tf) });
+      }
+      const pass = (front) => {
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        for (const { line, pts } of projected) {
+          if (line.layer === "horizon" && !front) continue;
+          ctx.beginPath();
+          if (!addSegments(ctx, pts, front)) continue;
+          ctx.globalAlpha = line.alpha;
+          ctx.strokeStyle = lineColor(line.layer);
+          ctx.lineWidth = line.width;
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      };
+
+      const dots = [];
+      if (layers.photons) {
+        const { a, rP, rR } = geom;
+        if (layers.pro) dots.push({ p: tf(kerrCart(rP, Math.PI / 2, (state.phase * 2.8) / (rP ** 1.5 + a), a)), color: colors.cyan });
+        if (layers.retro) dots.push({ p: tf(kerrCart(rR, Math.PI / 2, (-state.phase * 2.8) / (rR ** 1.5 - a), a)), color: colors.orange });
+      }
+      const drawDots = (front) => {
+        for (const { p, color } of dots) {
+          if ((p.d >= 0) !== front) continue;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2);
+          ctx.fillStyle = color;
+          ctx.fill();
+        }
+      };
+
+      pass(false);
+      drawDots(false);
+      if (layers.horizon) {
+        ctx.beginPath();
+        ctx.arc(w / 2, h / 2, geom.rH * k, 0, Math.PI * 2);
+        ctx.fillStyle = colors.hole;
+        ctx.fill();
+        ctx.globalAlpha = 0.5;
+        ctx.strokeStyle = colors.limb;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      pass(true);
+      drawDots(true);
+
+      if (layers.axis) {
+        const tip = tf({ x: 0, y: 0, z: 7.2 });
+        ctx.fillStyle = colors.muted;
+        ctx.font = "11px ui-sans-serif, system-ui, sans-serif";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "alphabetic";
+        ctx.fillText("spin", tip.x + 6, tip.y - 4);
+      }
     }
 
     function drawGizmo(cam) {
@@ -445,6 +557,7 @@
       gtx.fillStyle = "rgba(255,255,255,0.06)";
       gtx.fill();
       gtx.strokeStyle = "rgba(255,255,255,0.12)";
+      gtx.lineWidth = 1;
       gtx.stroke();
       const axes = [
         { label: "X", vec: { x: 1, y: 0, z: 0 }, color: colors.red },
@@ -463,6 +576,7 @@
         const nx = ax.x / len, ny = ax.y / len;
         gtx.strokeStyle = ax.color;
         gtx.globalAlpha = 0.35;
+        gtx.lineWidth = 1.5;
         gtx.beginPath();
         gtx.moveTo(cx - ax.x * 0.35, cy - ax.y * 0.35);
         gtx.lineTo(cx, cy);
@@ -491,72 +605,14 @@
     function frame(now) {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      if (state.layers.rotate && !state.drag) state.cam.yaw += dt * 0.22;
+      const rotating = state.layers.rotate && !state.drag;
+      if (rotating) state.cam.yaw += dt * 0.22;
       if (state.layers.photons) state.phase += dt;
-
-      const w = state.cssW, h = state.cssH;
-      const cam = state.cam;
-      const chi = state.chi;
-      const a = chi * M;
-      const rH = rh(chi), rP = rPro(chi), rR = rRetro(chi);
-      const kerrPoint = (r, th, ph) => kerrCart(r, th, ph, a);
-
-      ctx.clearRect(0, 0, w, h);
-
-      if (state.layers.shadow) {
-        const sil = shadowSilhouette(chi, Math.PI / 2 - cam.pitch);
-        const cy = Math.cos(-cam.yaw), sy = Math.sin(-cam.yaw);
-        const cp = Math.cos(-cam.pitch), sp = Math.sin(-cam.pitch);
-        const world = sil.map((p) => {
-          let x = p.a, y = 0, z = p.b;
-          const y1 = y * cp - z * sp;
-          const z1 = y * sp + z * cp;
-          return { x: x * cy - y1 * sy, y: x * sy + y1 * cy, z: z1 };
-        });
-        fillPath(world, cam, w, h, colors.purple, 0.12, colors.purple);
+      if (rotating || state.layers.photons || state.dirty) {
+        state.dirty = false;
+        drawScene(state.cssW, state.cssH);
+        drawGizmo(state.cam);
       }
-      if (state.layers.retro) {
-        wireSphere(rR, cam, w, h, colors.orange, kerrPoint);
-        strokePath(ring(rR, 96, kerrPoint), cam, w, h, colors.orange, 2.4, 1);
-      }
-      if (state.layers.pro) {
-        wireSphere(rP, cam, w, h, colors.cyan, kerrPoint);
-        strokePath(ring(rP, 96, kerrPoint), cam, w, h, colors.cyan, 2.4, 1);
-      }
-      if (state.layers.horizon) {
-        meshSphere(rH, cam, w, h, colors.hole, sphereCart);
-        wireSphere(rH, cam, w, h, colors.limb, sphereCart);
-        strokePath(ring(rH, 64, sphereCart), cam, w, h, colors.limb, 1.4, 0.7);
-      }
-      if (state.layers.axis) {
-        strokePath([{ x: 0, y: 0, z: -7.2 }, { x: 0, y: 0, z: 7.2 }], cam, w, h, colors.muted, 1, 0.7);
-      }
-      if (state.layers.photons) {
-        const omegaP = 1 / (rP ** 1.5 + a);
-        const omegaR = 1 / (rR ** 1.5 - a);
-        if (state.layers.pro) {
-          const pP = kerrCart(rP, Math.PI / 2, state.phase * omegaP * 2.8, a);
-          const qP = project(pP, cam, w, h);
-          if (!qP.behind) {
-            ctx.fillStyle = colors.cyan;
-            ctx.beginPath();
-            ctx.arc(qP.x, qP.y, 4.5, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-        if (state.layers.retro) {
-          const pR = kerrCart(rR, Math.PI / 2, -state.phase * omegaR * 2.8, a);
-          const qR = project(pR, cam, w, h);
-          if (!qR.behind) {
-            ctx.fillStyle = colors.orange;
-            ctx.beginPath();
-            ctx.arc(qR.x, qR.y, 4.5, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-      }
-
-      drawGizmo(cam);
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);

@@ -22,12 +22,17 @@ import {
   useCanvasState,
   useHostTheme,
 } from "cursor/canvas";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const M = 1;
 const CHI_MAX = 0.998;
+/** Reference camera distance for the mild perspective falloff. */
+const REF_DIST = 22;
+/** World radius (in units of M) that fits the viewport at zoom = 1. */
+const FIT_RADIUS = 10.2;
 
 type Vec3 = { x: number; y: number; z: number };
+type SkyPoint = { a: number; b: number };
 
 function clamp(value: number, lo: number, hi: number) {
   return Math.min(hi, Math.max(lo, value));
@@ -74,47 +79,95 @@ function teoEta(r: number, a: number) {
   return (r ** 3 * (4 * a * a * M - r * (r - 3 * M) ** 2)) / (a * a * (r - M) ** 2);
 }
 
-function shadowSilhouette(chi: number, thetaObs: number): { a: number; b: number }[] {
-  const th = clamp(thetaObs, 0.12, Math.PI - 0.12);
-  if (chi < 0.02) {
-    const R = 3 * Math.sqrt(3) * M;
-    const pts: { a: number; b: number }[] = [];
-    for (let i = 0; i <= 72; i++) {
-      const ang = (i / 72) * Math.PI * 2;
+/**
+ * Shadow edge (critical curve) on the observer's sky in Bardeen's (α, β)
+ * impact parameters, parametrised by the radius r of the unstable spherical
+ * photon orbit. The valid r-range is located by root-finding and sampled
+ * with cosine spacing so both ends of the D close smoothly at β = 0 instead
+ * of ending in a straight chord.
+ */
+function shadowSilhouette(chi: number, thetaObs: number): SkyPoint[] {
+  const th = clamp(thetaObs, 0.05, Math.PI - 0.05);
+  const n = 128;
+  const circle = (R: number): SkyPoint[] => {
+    const pts: SkyPoint[] = [];
+    for (let i = 0; i <= n; i++) {
+      const ang = (i / n) * Math.PI * 2;
       pts.push({ a: R * Math.cos(ang), b: R * Math.sin(ang) });
     }
     return pts;
-  }
+  };
+  if (chi < 1e-3) return circle(3 * Math.sqrt(3) * M);
+
   const spin = chi * M;
   const sinT = Math.sin(th);
-  const cotT = Math.cos(th) / sinT;
-  const r1 = rPro(chi) + 1e-4;
-  const r2 = rRetro(chi) - 1e-4;
-  const n = 72;
-  const upper: { a: number; b: number }[] = [];
-  const lower: { a: number; b: number }[] = [];
-  for (let i = 0; i <= n; i++) {
-    const r = r1 + (r2 - r1) * (i / n);
+  const cosT = Math.cos(th);
+  const cot2 = (cosT * cosT) / (sinT * sinT);
+  const disc = (r: number) => {
     const xi = teoXi(r, spin);
-    const eta = teoEta(r, spin);
-    const disc = eta + spin * spin * Math.cos(th) ** 2 - xi * xi * cotT * cotT;
-    if (disc < 0) continue;
-    const alpha = -xi / sinT;
-    const beta = Math.sqrt(disc);
+    return teoEta(r, spin) + spin * spin * cosT * cosT - xi * xi * cot2;
+  };
+
+  const rLo = rPro(chi);
+  const rHi = rRetro(chi);
+  const N = 256;
+  const grid = (i: number) => rLo + ((rHi - rLo) * i) / N;
+  let iFirst = -1;
+  let iLast = -1;
+  for (let i = 0; i <= N; i++) {
+    if (disc(grid(i)) >= 0) {
+      if (iFirst < 0) iFirst = i;
+      iLast = i;
+    }
+  }
+  if (iFirst < 0) return circle(3 * Math.sqrt(3) * M);
+
+  let rMin = grid(iFirst);
+  if (iFirst > 0) {
+    let lo = grid(iFirst - 1);
+    let hi = rMin;
+    for (let k = 0; k < 40; k++) {
+      const mid = 0.5 * (lo + hi);
+      if (disc(mid) >= 0) hi = mid;
+      else lo = mid;
+    }
+    rMin = hi;
+  }
+  let rMax = grid(iLast);
+  if (iLast < N) {
+    let lo = rMax;
+    let hi = grid(iLast + 1);
+    for (let k = 0; k < 40; k++) {
+      const mid = 0.5 * (lo + hi);
+      if (disc(mid) >= 0) lo = mid;
+      else hi = mid;
+    }
+    rMax = lo;
+  }
+
+  const upper: SkyPoint[] = [];
+  const lower: SkyPoint[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = 0.5 * (1 - Math.cos((Math.PI * i) / n));
+    const r = rMin + (rMax - rMin) * t;
+    const alpha = -teoXi(r, spin) / sinT;
+    const beta = Math.sqrt(Math.max(0, disc(r)));
     upper.push({ a: alpha, b: beta });
     lower.push({ a: alpha, b: -beta });
   }
-  if (upper.length < 3) {
-    const R = 3 * Math.sqrt(3) * M;
-    return [
-      { a: R, b: 0 },
-      { a: 0, b: R },
-      { a: -R, b: 0 },
-      { a: 0, b: -R },
-      { a: R, b: 0 },
-    ];
+  lower.reverse();
+  return upper.concat(lower);
+}
+
+let silhouetteKey = "";
+let silhouettePts: SkyPoint[] = [];
+function silhouetteCached(chi: number, thetaObs: number): SkyPoint[] {
+  const key = `${chi.toFixed(4)}|${thetaObs.toFixed(3)}`;
+  if (key !== silhouetteKey) {
+    silhouetteKey = key;
+    silhouettePts = shadowSilhouette(chi, thetaObs);
   }
-  return [...upper, ...lower.reverse()];
+  return silhouettePts;
 }
 
 function shadowWidth(chi: number, thetaObs: number) {
@@ -134,155 +187,7 @@ function fmt(value: number) {
   return `${value.toFixed(3)} M`;
 }
 
-type Cam = { yaw: number; pitch: number; dist: number };
-
-function toCamera(p: Vec3, cam: Cam): Vec3 {
-  const cy = Math.cos(cam.yaw);
-  const sy = Math.sin(cam.yaw);
-  const cp = Math.cos(cam.pitch);
-  const sp = Math.sin(cam.pitch);
-  const x1 = p.x * cy - p.y * sy;
-  const y1 = p.x * sy + p.y * cy;
-  const z1 = p.z;
-  return {
-    x: x1,
-    y: y1 * cp - z1 * sp,
-    z: y1 * sp + z1 * cp,
-  };
-}
-
-function project(p: Vec3, cam: Cam, width: number, height: number) {
-  const c = toCamera(p, cam);
-  const depth = cam.dist - c.y;
-  const persp = cam.dist / Math.max(0.35, depth);
-  const scale = (Math.min(width, height) * 0.4) / 8;
-  return {
-    x: width / 2 + c.x * scale * persp,
-    y: height / 2 - c.z * scale * persp,
-    depth: c.y,
-    behind: depth < 0.2,
-  };
-}
-
-function ringPoints(r: number, n: number, point: (r: number, theta: number, phi: number) => Vec3) {
-  const pts: Vec3[] = [];
-  for (let i = 0; i <= n; i++) {
-    pts.push(point(r, Math.PI / 2, (i / n) * Math.PI * 2));
-  }
-  return pts;
-}
-
-function AxisGizmo({ cam }: { cam: Cam }) {
-  const theme = useHostTheme();
-  const cx = 48;
-  const cy = 48;
-  const radius = 28;
-  const axes = [
-    { label: "X", vec: { x: 1, y: 0, z: 0 }, color: theme.category.red },
-    { label: "Y", vec: { x: 0, y: 1, z: 0 }, color: theme.category.green },
-    { label: "Z", vec: { x: 0, y: 0, z: 1 }, color: theme.category.blue },
-  ].map((axis) => {
-    const c = toCamera(axis.vec, cam);
-    return {
-      ...axis,
-      x: c.x * radius,
-      y: -c.z * radius,
-      depth: c.y,
-    };
-  });
-  axes.sort((u, v) => u.depth - v.depth);
-
-  return (
-    <svg
-      width={96}
-      height={96}
-      style={{
-        position: "absolute",
-        top: 10,
-        right: 10,
-        pointerEvents: "none",
-      }}
-    >
-      <circle
-        cx={cx}
-        cy={cy}
-        r={46}
-        fill={theme.fill.tertiary}
-        stroke={theme.stroke.tertiary}
-        strokeWidth={1}
-      />
-      {axes.map((axis) => {
-        const tx = cx + axis.x;
-        const ty = cy + axis.y;
-        const nx = axis.x / (Math.hypot(axis.x, axis.y) || 1);
-        const ny = axis.y / (Math.hypot(axis.x, axis.y) || 1);
-        const bx = tx - nx * 7;
-        const by = ty - ny * 7;
-        const px = -ny * 3.2;
-        const py = nx * 3.2;
-        const lx = tx + nx * 10;
-        const ly = ty + ny * 10;
-        return (
-          <g key={axis.label}>
-            <line
-              x1={cx - axis.x * 0.35}
-              y1={cy - axis.y * 0.35}
-              x2={cx}
-              y2={cy}
-              stroke={axis.color}
-              strokeWidth={1.5}
-              strokeOpacity={0.35}
-            />
-            <line
-              x1={cx}
-              y1={cy}
-              x2={bx}
-              y2={by}
-              stroke={axis.color}
-              strokeWidth={2}
-            />
-            <polygon
-              points={`${tx},${ty} ${bx + px},${by + py} ${bx - px},${by - py}`}
-              fill={axis.color}
-            />
-            <text
-              x={lx}
-              y={ly}
-              fill={axis.color}
-              fontSize={11}
-              fontWeight={590}
-              fontFamily="ui-sans-serif, system-ui, sans-serif"
-              textAnchor="middle"
-              dominantBaseline="middle"
-            >
-              {axis.label}
-            </text>
-          </g>
-        );
-      })}
-      <text
-        x={cx}
-        y={90}
-        fill={theme.text.tertiary}
-        fontSize={9}
-        fontFamily="ui-sans-serif, system-ui, sans-serif"
-        textAnchor="middle"
-      >
-        Z = spin
-      </text>
-    </svg>
-  );
-}
-
-function polyToPath(pts: { x: number; y: number }[]) {
-  if (pts.length === 0) return "";
-  return pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" ") + " Z";
-}
-
-function lineToPath(pts: { x: number; y: number }[]) {
-  if (pts.length === 0) return "";
-  return pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" ");
-}
+type Cam = { yaw: number; pitch: number; zoom: number };
 
 type Layers = {
   horizon: boolean;
@@ -292,11 +197,301 @@ type Layers = {
   axis: boolean;
   photons: boolean;
 };
+type LayerKey = keyof Layers;
 
-type DrawItem = {
-  z: number;
-  node: ReactNode;
+type Theme = ReturnType<typeof useHostTheme>;
+
+/** A polyline in world space. Geometry is built once per spin value. */
+type Line = { layer: LayerKey; pts: Vec3[]; width: number; alpha: number };
+type Geometry = { a: number; rH: number; rP: number; rR: number; lines: Line[] };
+
+function wireLines(
+  r: number,
+  point: (r: number, theta: number, phi: number) => Vec3,
+  layer: LayerKey,
+  ringWidth: number,
+  ringAlpha: number,
+): Line[] {
+  const lines: Line[] = [];
+  const meridians = 10;
+  const parallels = 8;
+  for (let m = 0; m < meridians; m++) {
+    const phi = (m / meridians) * Math.PI * 2;
+    const pts: Vec3[] = [];
+    for (let i = 0; i <= 32; i++) pts.push(point(r, (i / 32) * Math.PI, phi));
+    lines.push({ layer, pts, width: 1, alpha: 0.55 });
+  }
+  for (let p = 1; p < parallels; p++) {
+    if (p * 2 === parallels) continue;
+    const theta = (p / parallels) * Math.PI;
+    const pts: Vec3[] = [];
+    for (let i = 0; i <= 48; i++) pts.push(point(r, theta, (i / 48) * Math.PI * 2));
+    lines.push({ layer, pts, width: 1, alpha: 0.4 });
+  }
+  const ring: Vec3[] = [];
+  for (let i = 0; i <= 96; i++) ring.push(point(r, Math.PI / 2, (i / 96) * Math.PI * 2));
+  lines.push({ layer, pts: ring, width: ringWidth, alpha: ringAlpha });
+  return lines;
+}
+
+function buildGeometry(chi: number): Geometry {
+  const a = chi * M;
+  const rH = rh(chi);
+  const rP = rPro(chi);
+  const rR = rRetro(chi);
+  const kerrPoint = (r: number, theta: number, phi: number) => kerrCart(r, theta, phi, a);
+  const axis: Vec3[] = [];
+  for (let i = 0; i <= 8; i++) axis.push({ x: 0, y: 0, z: -7.2 + (14.4 * i) / 8 });
+  const lines: Line[] = [
+    ...wireLines(rR, kerrPoint, "retrograde", 2.4, 1),
+    ...wireLines(rP, kerrPoint, "prograde", 2.4, 1),
+    ...wireLines(rH, sphereCart, "horizon", 1.4, 0.7),
+    { layer: "axis", pts: axis, width: 1, alpha: 0.7 },
+  ];
+  return { a, rH, rP, rR, lines };
+}
+
+type Pt = { x: number; y: number; d: number };
+
+function screenScale(zoom: number, w: number, h: number) {
+  return ((Math.min(w, h) * 0.44) / FIT_RADIUS) * zoom;
+}
+
+function toCamera(p: Vec3, cam: Cam): Vec3 {
+  const cy = Math.cos(cam.yaw);
+  const sy = Math.sin(cam.yaw);
+  const cp = Math.cos(cam.pitch);
+  const sp = Math.sin(cam.pitch);
+  const x1 = p.x * cy - p.y * sy;
+  const y1 = p.x * sy + p.y * cy;
+  return {
+    x: x1,
+    y: y1 * cp - p.z * sp,
+    z: y1 * sp + p.z * cp,
+  };
+}
+
+/** Builds a world→screen projector with the camera trig precomputed. */
+function makeTransform(cam: Cam, w: number, h: number) {
+  const cy = Math.cos(cam.yaw);
+  const sy = Math.sin(cam.yaw);
+  const cp = Math.cos(cam.pitch);
+  const sp = Math.sin(cam.pitch);
+  const k = screenScale(cam.zoom, w, h);
+  const cx = w / 2;
+  const cz = h / 2;
+  return (p: Vec3): Pt => {
+    const x1 = p.x * cy - p.y * sy;
+    const y1 = p.x * sy + p.y * cy;
+    const d = y1 * cp - p.z * sp;
+    const z = y1 * sp + p.z * cp;
+    const persp = 1 / Math.max(0.72, 1 - 0.12 * (d / REF_DIST));
+    return { x: cx + x1 * k * persp, y: cz - z * k * persp, d };
+  };
+}
+
+/** Adds the segments of a projected polyline that lie in front of / behind the hole. */
+function addSegments(ctx: CanvasRenderingContext2D, pts: Pt[], front: boolean): boolean {
+  let open = false;
+  let any = false;
+  for (let i = 1; i < pts.length; i++) {
+    const p = pts[i - 1];
+    const q = pts[i];
+    if ((p.d + q.d >= 0) === front) {
+      if (!open) {
+        ctx.moveTo(p.x, p.y);
+        open = true;
+      }
+      ctx.lineTo(q.x, q.y);
+      any = true;
+    } else {
+      open = false;
+    }
+  }
+  return any;
+}
+
+type SceneState = {
+  chi: number;
+  layers: Layers;
+  autoRotate: boolean;
+  geom: Geometry;
+  theme: Theme;
 };
+
+function drawScene(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  cam: Cam,
+  phase: number,
+  s: SceneState,
+) {
+  const { chi, layers, geom, theme } = s;
+  const col = theme.category;
+  const tf = makeTransform(cam, w, h);
+  const k = screenScale(cam.zoom, w, h);
+
+  // Shadow: the critical curve lives on the observer's sky plane, so it is
+  // drawn directly in screen space (β along the projected spin axis).
+  if (layers.shadow) {
+    const sil = silhouetteCached(chi, Math.PI / 2 - cam.pitch);
+    ctx.beginPath();
+    for (let i = 0; i < sil.length; i++) {
+      const x = w / 2 + sil[i].a * k;
+      const y = h / 2 - sil[i].b * k;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.globalAlpha = 0.12;
+    ctx.fillStyle = col.purple;
+    ctx.fill();
+    ctx.globalAlpha = 0.95;
+    ctx.strokeStyle = col.purple;
+    ctx.lineWidth = 2.2;
+    ctx.lineJoin = "round";
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  const lineColor = (layer: LayerKey) => {
+    if (layer === "retrograde") return col.orange;
+    if (layer === "prograde") return col.cyan;
+    if (layer === "horizon") return theme.text.secondary;
+    return theme.text.tertiary;
+  };
+
+  const projected: { line: Line; pts: Pt[] }[] = [];
+  for (const line of geom.lines) {
+    if (!layers[line.layer]) continue;
+    projected.push({ line, pts: line.pts.map(tf) });
+  }
+
+  const pass = (front: boolean) => {
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    for (const { line, pts } of projected) {
+      // The back hemisphere of the horizon is hidden by the opaque disk.
+      if (line.layer === "horizon" && !front) continue;
+      ctx.beginPath();
+      if (!addSegments(ctx, pts, front)) continue;
+      ctx.globalAlpha = line.alpha;
+      ctx.strokeStyle = lineColor(line.layer);
+      ctx.lineWidth = line.width;
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  };
+
+  const dots: { p: Pt; color: string }[] = [];
+  if (layers.photons) {
+    const { a, rP, rR } = geom;
+    if (layers.prograde) {
+      const phiP = (phase * 2.8) / (rP ** 1.5 + a);
+      dots.push({ p: tf(kerrCart(rP, Math.PI / 2, phiP, a)), color: col.cyan });
+    }
+    if (layers.retrograde) {
+      const phiR = (-phase * 2.8) / (rR ** 1.5 - a);
+      dots.push({ p: tf(kerrCart(rR, Math.PI / 2, phiR, a)), color: col.orange });
+    }
+  }
+  const drawDots = (front: boolean) => {
+    for (const { p, color } of dots) {
+      if (p.d >= 0 !== front) continue;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+  };
+
+  pass(false);
+  drawDots(false);
+
+  if (layers.horizon) {
+    ctx.beginPath();
+    ctx.arc(w / 2, h / 2, geom.rH * k, 0, Math.PI * 2);
+    ctx.fillStyle = theme.kind === "light" ? theme.text.primary : theme.bg.chrome;
+    ctx.fill();
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = theme.text.secondary;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  pass(true);
+  drawDots(true);
+
+  if (layers.axis) {
+    const tip = tf({ x: 0, y: 0, z: 7.2 });
+    ctx.fillStyle = theme.text.tertiary;
+    ctx.font = "11px ui-sans-serif, system-ui, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText("spin", tip.x + 6, tip.y - 4);
+  }
+}
+
+function drawGizmo(ctx: CanvasRenderingContext2D, w: number, cam: Cam, theme: Theme) {
+  const cx = w - 58;
+  const cy = 58;
+  const radius = 28;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 46, 0, Math.PI * 2);
+  ctx.fillStyle = theme.fill.tertiary;
+  ctx.fill();
+  ctx.strokeStyle = theme.stroke.tertiary;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  const axes = [
+    { label: "X", vec: { x: 1, y: 0, z: 0 }, color: theme.category.red },
+    { label: "Y", vec: { x: 0, y: 1, z: 0 }, color: theme.category.green },
+    { label: "Z", vec: { x: 0, y: 0, z: 1 }, color: theme.category.blue },
+  ]
+    .map((axis) => {
+      const c = toCamera(axis.vec, cam);
+      return { ...axis, x: c.x * radius, y: -c.z * radius, depth: c.y };
+    })
+    .sort((u, v) => u.depth - v.depth);
+
+  ctx.font = "600 11px ui-sans-serif, system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (const axis of axes) {
+    const tx = cx + axis.x;
+    const ty = cy + axis.y;
+    const len = Math.hypot(axis.x, axis.y) || 1;
+    const nx = axis.x / len;
+    const ny = axis.y / len;
+    ctx.strokeStyle = axis.color;
+    ctx.globalAlpha = 0.35;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx - axis.x * 0.35, cy - axis.y * 0.35);
+    ctx.lineTo(cx, cy);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(tx - nx * 7, ty - ny * 7);
+    ctx.stroke();
+    ctx.fillStyle = axis.color;
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(tx - nx * 7 - ny * 3.2, ty - ny * 7 + nx * 3.2);
+    ctx.lineTo(tx - nx * 7 + ny * 3.2, ty - ny * 7 - nx * 3.2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillText(axis.label, tx + nx * 10, ty + ny * 10);
+  }
+  ctx.fillStyle = theme.text.tertiary;
+  ctx.font = "9px ui-sans-serif, system-ui, sans-serif";
+  ctx.fillText("Z = spin", cx, cy + 42);
+}
 
 function Viewport({
   chi,
@@ -309,272 +504,86 @@ function Viewport({
 }) {
   const theme = useHostTheme();
   const wrapRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ w: 720, h: 520 });
-  const [cam, setCam] = useState<Cam>({ yaw: 0.55, pitch: 0.38, dist: 22 });
-  const [dragging, setDragging] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const camRef = useRef<Cam>({ yaw: 0.55, pitch: 0.38, zoom: 1 });
   const dragRef = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null);
   const phaseRef = useRef(0);
-  const [phase, setPhase] = useState(0);
+  const dirtyRef = useRef(true);
+  const [dragging, setDragging] = useState(false);
+
+  const geom = useMemo(() => buildGeometry(chi), [chi]);
+  const stateRef = useRef<SceneState>({ chi, layers, autoRotate, geom, theme });
+  stateRef.current = { chi, layers, autoRotate, geom, theme };
+  useEffect(() => {
+    dirtyRef.current = true;
+  });
 
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const apply = () => {
-      const rect = el.getBoundingClientRect();
-      setSize({ w: Math.max(320, rect.width), h: Math.max(360, rect.height) });
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      let dy = event.deltaY;
+      if (event.deltaMode === 1) dy *= 16;
+      if (event.deltaMode === 2) dy *= 40;
+      const cam = camRef.current;
+      cam.zoom = clamp(cam.zoom * Math.exp(-dy * 0.0018), 0.35, 3.5);
+      dirtyRef.current = true;
     };
-    apply();
-    const obs = new ResizeObserver(apply);
-    obs.observe(el);
-    return () => obs.disconnect();
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
   useEffect(() => {
+    const wrap = wrapRef.current;
+    const canvas = canvasRef.current;
+    if (!wrap || !canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let w = 0;
+    let h = 0;
+    const resize = () => {
+      const rect = wrap.getBoundingClientRect();
+      w = Math.max(320, rect.width);
+      h = Math.max(360, rect.height);
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      dirtyRef.current = true;
+    };
+    resize();
+    const obs = new ResizeObserver(resize);
+    obs.observe(wrap);
+
     let frame = 0;
     let last = performance.now();
     const tick = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      if (autoRotate && !dragRef.current) {
-        setCam((prev) => ({ ...prev, yaw: prev.yaw + dt * 0.22 }));
-      }
-      if (layers.photons) {
-        phaseRef.current += dt;
-        setPhase(phaseRef.current);
+      const s = stateRef.current;
+      const cam = camRef.current;
+      const animating = (s.autoRotate && !dragRef.current) || s.layers.photons;
+      if (s.autoRotate && !dragRef.current) cam.yaw += dt * 0.22;
+      if (s.layers.photons) phaseRef.current += dt;
+      if (animating || dirtyRef.current) {
+        dirtyRef.current = false;
+        ctx.clearRect(0, 0, w, h);
+        drawScene(ctx, w, h, cam, phaseRef.current, s);
+        drawGizmo(ctx, w, cam, s.theme);
       }
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [autoRotate, layers.photons, setCam]);
-
-  const a = chi * M;
-  const rH = rh(chi);
-  const rP = rPro(chi);
-  const rR = rRetro(chi);
-  const thetaObs = Math.PI / 2 - cam.pitch;
-  const silhouette = useMemo(() => shadowSilhouette(chi, thetaObs), [chi, thetaObs]);
-  const colors = theme.category;
-
-  const items = useMemo(() => {
-    const { w, h } = size;
-    const drawn: DrawItem[] = [];
-    const key = { n: 0 };
-    const nextKey = () => {
-      key.n += 1;
-      return `d${key.n}`;
+    return () => {
+      cancelAnimationFrame(frame);
+      obs.disconnect();
     };
-
-    const pushLine = (pts: Vec3[], stroke: string, width: number, opacity: number) => {
-      const proj = pts.map((p) => project(p, cam, w, h)).filter((p) => !p.behind);
-      if (proj.length < 2) return;
-      const z = proj.reduce((s, p) => s + p.depth, 0) / proj.length;
-      drawn.push({
-        z,
-        node: (
-          <path
-            key={nextKey()}
-            d={lineToPath(proj)}
-            fill="none"
-            stroke={stroke}
-            strokeWidth={width}
-            strokeOpacity={opacity}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
-        ),
-      });
-    };
-
-    const pushFill = (pts: Vec3[], fill: string, opacity: number, stroke?: string) => {
-      const proj = pts.map((p) => project(p, cam, w, h)).filter((p) => !p.behind);
-      if (proj.length < 3) return;
-      const z = proj.reduce((s, p) => s + p.depth, 0) / proj.length;
-      drawn.push({
-        z,
-        node: (
-          <path
-            key={nextKey()}
-            d={polyToPath(proj)}
-            fill={fill}
-            fillOpacity={opacity}
-            stroke={stroke ?? "none"}
-            strokeWidth={stroke ? 1 : 0}
-            strokeOpacity={0.85}
-          />
-        ),
-      });
-    };
-
-    if (layers.shadow && silhouette.length > 3) {
-      const worldShadow: Vec3[] = silhouette.map((p) => {
-        const cy = Math.cos(-cam.yaw);
-        const sy = Math.sin(-cam.yaw);
-        const cp = Math.cos(-cam.pitch);
-        const sp = Math.sin(-cam.pitch);
-        let x = p.a;
-        let y = 0;
-        let z = p.b;
-        const y1 = y * cp - z * sp;
-        const z1 = y * sp + z * cp;
-        const x2 = x * cy - y1 * sy;
-        const y2 = x * sy + y1 * cy;
-        return { x: x2, y: y2, z: z1 };
-      });
-      pushFill(worldShadow, colors.purple, 0.12, colors.purple);
-      pushLine(worldShadow, colors.purple, 2.2, 0.95);
-    }
-
-    const meshSurface = (
-      r: number,
-      nTh: number,
-      nPh: number,
-      fill: string,
-      opacity: number,
-      point: (r: number, theta: number, phi: number) => Vec3,
-    ) => {
-      for (let i = 0; i < nTh; i++) {
-        const t0 = (i / nTh) * Math.PI;
-        const t1 = ((i + 1) / nTh) * Math.PI;
-        for (let j = 0; j < nPh; j++) {
-          const p0 = (j / nPh) * Math.PI * 2;
-          const p1 = ((j + 1) / nPh) * Math.PI * 2;
-          const a0 = point(r, t0, p0);
-          const a1 = point(r, t0, p1);
-          const a2 = point(r, t1, p1);
-          const a3 = point(r, t1, p0);
-          const c0 = toCamera(a0, cam);
-          const c1 = toCamera(a1, cam);
-          const c2 = toCamera(a2, cam);
-          const e1x = c1.x - c0.x;
-          const e1y = c1.y - c0.y;
-          const e1z = c1.z - c0.z;
-          const e2x = c2.x - c0.x;
-          const e2y = c2.y - c0.y;
-          const e2z = c2.z - c0.z;
-          const ny = e1z * e2x - e1x * e2z;
-          if (ny <= 0) continue;
-          const z = (c0.y + c1.y + c2.y) / 3;
-          const q0 = project(a0, cam, w, h);
-          const q1 = project(a1, cam, w, h);
-          const q2 = project(a2, cam, w, h);
-          const q3 = project(a3, cam, w, h);
-          if (q0.behind && q1.behind && q2.behind) continue;
-          drawn.push({
-            z,
-            node: (
-              <polygon
-                key={nextKey()}
-                points={`${q0.x},${q0.y} ${q1.x},${q1.y} ${q2.x},${q2.y} ${q3.x},${q3.y}`}
-                fill={fill}
-                fillOpacity={opacity}
-                stroke={fill}
-                strokeWidth={0.4}
-                strokeOpacity={opacity * 0.8}
-              />
-            ),
-          });
-        }
-      }
-    };
-
-    const wireSphere = (
-      r: number,
-      stroke: string,
-      meridians: number,
-      parallels: number,
-      point: (r: number, theta: number, phi: number) => Vec3,
-    ) => {
-      for (let m = 0; m < meridians; m++) {
-        const phi = (m / meridians) * Math.PI * 2;
-        const pts: Vec3[] = [];
-        for (let i = 0; i <= 28; i++) {
-          pts.push(point(r, (i / 28) * Math.PI, phi));
-        }
-        pushLine(pts, stroke, 1, 0.55);
-      }
-      for (let p = 1; p < parallels; p++) {
-        const theta = (p / parallels) * Math.PI;
-        const pts: Vec3[] = [];
-        for (let i = 0; i <= 48; i++) {
-          pts.push(point(r, theta, (i / 48) * Math.PI * 2));
-        }
-        pushLine(pts, stroke, 1, p === parallels / 2 ? 0.9 : 0.4);
-      }
-    };
-
-    const kerrPoint = (r: number, theta: number, phi: number) => kerrCart(r, theta, phi, a);
-
-    if (layers.retrograde) {
-      wireSphere(rR, colors.orange, 10, 8, kerrPoint);
-      pushLine(ringPoints(rR, 96, kerrPoint), colors.orange, 2.4, 1);
-    }
-    if (layers.prograde) {
-      wireSphere(rP, colors.cyan, 10, 8, kerrPoint);
-      pushLine(ringPoints(rP, 96, kerrPoint), colors.cyan, 2.4, 1);
-    }
-    if (layers.horizon) {
-      const hole = theme.kind === "light" ? theme.text.primary : theme.bg.chrome;
-      meshSurface(rH, 16, 32, hole, 1, sphereCart);
-      wireSphere(rH, theme.text.secondary, 10, 8, sphereCart);
-      pushLine(ringPoints(rH, 64, sphereCart), theme.text.secondary, 1.4, 0.7);
-    }
-    if (layers.axis) {
-      pushLine(
-        [
-          { x: 0, y: 0, z: -7.2 },
-          { x: 0, y: 0, z: 7.2 },
-        ],
-        theme.text.tertiary,
-        1,
-        0.7,
-      );
-      const tip = project({ x: 0, y: 0, z: 7.2 }, cam, w, h);
-      if (!tip.behind) {
-        drawn.push({
-          z: toCamera({ x: 0, y: 0, z: 7.2 }, cam).y,
-          node: (
-            <text
-              key={nextKey()}
-              x={tip.x + 6}
-              y={tip.y - 4}
-              fill={theme.text.tertiary}
-              fontSize={11}
-              fontFamily="ui-sans-serif, system-ui, sans-serif"
-            >
-              spin
-            </text>
-          ),
-        });
-      }
-    }
-
-    if (layers.photons) {
-      const omegaP = 1 / (rP ** 1.5 + a);
-      const omegaR = 1 / (rR ** 1.5 - a);
-      const phiP = phase * omegaP * 2.8;
-      const phiR = -phase * omegaR * 2.8;
-      const pP = kerrCart(rP, Math.PI / 2, phiP, a);
-      const pR = kerrCart(rR, Math.PI / 2, phiR, a);
-      const qP = project(pP, cam, w, h);
-      const qR = project(pR, cam, w, h);
-      if (layers.prograde && !qP.behind) {
-        drawn.push({
-          z: toCamera(pP, cam).y + 0.4,
-          node: <circle key={nextKey()} cx={qP.x} cy={qP.y} r={4.5} fill={colors.cyan} />,
-        });
-      }
-      if (layers.retrograde && !qR.behind) {
-        drawn.push({
-          z: toCamera(pR, cam).y + 0.4,
-          node: <circle key={nextKey()} cx={qR.x} cy={qR.y} r={4.5} fill={colors.orange} />,
-        });
-      }
-    }
-
-    drawn.sort((u, v) => u.z - v.z);
-    return drawn.map((d) => d.node);
-  }, [a, cam, chi, colors, layers, phase, rH, rP, rR, silhouette, size, theme]);
+  }, []);
 
   return (
     <div
@@ -586,6 +595,8 @@ function Viewport({
         borderRadius: 8,
         background: theme.bg.editor,
         overflow: "hidden",
+        overscrollBehavior: "contain",
+        touchAction: "none",
         cursor: dragging ? "grabbing" : "grab",
         userSelect: "none",
         position: "relative",
@@ -597,44 +608,33 @@ function Viewport({
         clientY: number;
       }) => {
         event.currentTarget.setPointerCapture(event.pointerId);
+        const cam = camRef.current;
         dragRef.current = { x: event.clientX, y: event.clientY, yaw: cam.yaw, pitch: cam.pitch };
         setDragging(true);
       }}
       onPointerMove={(event: { clientX: number; clientY: number }) => {
         const start = dragRef.current;
         if (!start) return;
-        const dyaw = (event.clientX - start.x) * 0.008;
-        const dpitch = (event.clientY - start.y) * 0.008;
-        setCam({
-          ...cam,
-          yaw: start.yaw + dyaw,
-          pitch: clamp(start.pitch + dpitch, -1.15, 1.15),
-        });
+        const cam = camRef.current;
+        cam.yaw = start.yaw + (event.clientX - start.x) * 0.008;
+        cam.pitch = clamp(start.pitch + (event.clientY - start.y) * 0.008, -1.15, 1.15);
+        dirtyRef.current = true;
       }}
       onPointerUp={() => {
         dragRef.current = null;
         setDragging(false);
       }}
-      onWheel={(event: { preventDefault: () => void; deltaY: number }) => {
-        event.preventDefault();
-        setCam((prev) => ({
-          ...prev,
-          dist: clamp(prev.dist + event.deltaY * 0.02, 12, 40),
-        }));
+      onPointerCancel={() => {
+        dragRef.current = null;
+        setDragging(false);
       }}
     >
-      <svg width={size.w} height={size.h} style={{ display: "block" }}>
-        {items}
-      </svg>
-      <AxisGizmo cam={cam} />
+      <canvas ref={canvasRef} style={{ display: "block", position: "absolute", inset: 0 }} />
       <div
         style={{
           position: "absolute",
           left: 12,
           bottom: 12,
-          display: "flex",
-          flexDirection: "column",
-          gap: 4,
           pointerEvents: "none",
         }}
       >
@@ -661,7 +661,7 @@ export default function KerrBlackHoleModel() {
   const rH = rh(chiClamped);
   const rP = rPro(chiClamped);
   const rR = rRetro(chiClamped);
-  const shadowDims = shadowWidth(chiClamped, Math.PI / 2);
+  const shadowDims = useMemo(() => shadowWidth(chiClamped, Math.PI / 2), [chiClamped]);
 
   const chart = useMemo(() => {
     const categories: string[] = [];
@@ -772,7 +772,8 @@ export default function KerrBlackHoleModel() {
         The notebook defines rh as the outer Kerr horizon. Unstable circular photon orbits sit at
         rPro (co-rotating) and rRetro (counter-rotating). The shadow is the capture cross-section on
         the distant observer’s sky — larger than either photon sphere, and D-shaped when viewed near
-        the equator of a spinning hole.
+        the equator of a spinning hole. It is drawn on the sky plane, so it follows your viewing
+        inclination but not the hole’s rotation.
       </Callout>
 
       <H2>Radii versus spin</H2>
