@@ -6,191 +6,268 @@
   <title>Kerr black hole</title>
   <style>
     :root {
-      --bg: #101114;
-      --panel: #16181d;
-      --text: #ececec;
-      --muted: #9a9aa3;
-      --line: #2a2d34;
-      --cyan: #3db8d8;
-      --orange: #e08a3c;
-      --purple: #9b7ad6;
-      --red: #d45d5d;
-      --green: #5dbe7a;
-      --blue: #5b8def;
+      --bg: #181818;
+      --chrome: #141414;
+      --text: #F0F0F0;
+      --text-2: #F0F0F0BD;
+      --text-3: #F0F0F099;
+      --fill-2: #F0F0F024;
+      --fill-3: #F0F0F014;
+      --fill-4: #F0F0F00F;
+      --stroke-1: #F0F0F033;
+      --stroke-2: #F0F0F01F;
+      --stroke-3: #F0F0F014;
+      --accent: #599CE7;
+      --cyan: #81A1C1;
+      --orange: #DD7F76;
+      --purple: #9386F2;
+      --red: #FC6B83;
+      --green: #3FA266;
+      --blue: #7BAFE9;
+      --chart-info: #70B0D8;
+      --chart-warning: #F0A040;
+      --chart-danger: #C04848;
+      --chart-neutral: #8888A8;
     }
     * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; }
+    html, body { margin: 0; }
     body {
-      font: 14px/1.45 ui-sans-serif, system-ui, sans-serif;
+      font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
       background: var(--bg);
       color: var(--text);
     }
-    header {
-      padding: 16px 20px 8px;
-      max-width: 1100px;
-      margin: 0 auto;
-    }
-    h1 { font-size: 22px; font-weight: 600; margin: 0 0 6px; }
-    .sub { color: var(--muted); margin: 0; }
-    .stats {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 16px 28px;
-      max-width: 1100px;
-      margin: 8px auto 0;
-      padding: 0 20px 12px;
-    }
-    .stat b { display: block; font-size: 18px; font-weight: 600; }
-    .stat span { color: var(--muted); font-size: 12px; }
-    .wrap {
-      display: grid;
-      grid-template-columns: minmax(0, 1.6fr) 280px;
-      gap: 16px;
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 0 20px 24px;
-    }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px 24px 48px; display: flex; flex-direction: column; gap: 20px; }
+    h1 { font-size: 24px; font-weight: 600; margin: 0; line-height: 1.25; }
+    h2 { font-size: 16px; font-weight: 600; margin: 0; }
+    h3 { font-size: 14px; font-weight: 600; margin: 0; }
+    p { margin: 0; }
+    .secondary { color: var(--text-2); }
+    .tertiary { color: var(--text-3); }
+    .small { font-size: 12px; }
+    .stack { display: flex; flex-direction: column; }
+    .row { display: flex; align-items: center; }
+    .wrap { flex-wrap: wrap; }
+
+    .stats { gap: 12px; }
+    .stat { min-width: 150px; }
+    .stat b { display: block; font-size: 20px; font-weight: 600; line-height: 1.2; }
+    .stat span { display: block; font-size: 12px; color: var(--text-3); margin-top: 2px; }
+
     .viewport {
       position: relative;
-      height: 560px;
-      border: 1px solid var(--line);
+      height: 520px;
+      min-height: 520px;
+      border: 1px solid var(--stroke-3);
       border-radius: 8px;
       overflow: hidden;
-      background: #0c0d10;
+      background: var(--bg);
       cursor: grab;
       touch-action: none;
       overscroll-behavior: contain;
+      user-select: none;
     }
     .viewport.dragging { cursor: grabbing; }
     canvas#scene { display: block; position: absolute; inset: 0; }
-    canvas#gizmo {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      width: 96px;
-      height: 96px;
-      pointer-events: none;
+    .hint { position: absolute; left: 12px; bottom: 12px; color: var(--text-3); font-size: 12px; pointer-events: none; }
+
+    .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
+    @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+
+    input[type="range"] { flex: 1; accent-color: var(--accent); margin: 0; }
+    .chi-value { width: 56px; text-align: right; font-weight: 600; }
+
+    .pill {
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 999px; white-space: nowrap; user-select: none;
+      font: inherit; font-size: 12px; line-height: 14px; font-weight: 400;
+      padding: 6px 10px; cursor: pointer;
+      color: var(--text-2); background: transparent; border: 1px solid var(--stroke-2);
+      transition: color 120ms ease, background 120ms ease;
     }
-    .hint {
-      position: absolute;
-      left: 12px;
-      bottom: 10px;
-      color: var(--muted);
-      font-size: 12px;
-      pointer-events: none;
+    .pill.active { color: var(--text); background: var(--fill-2); border-color: transparent; font-weight: 500; }
+
+    .toggle {
+      position: relative; width: 32px; height: 18px; border-radius: 999px; border: none; padding: 0;
+      background: var(--fill-2); cursor: pointer; transition: background 120ms ease;
     }
-    aside {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 14px;
-      background: var(--panel);
+    .toggle::after {
+      content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
+      background: var(--text); transition: transform 120ms ease;
     }
-    h2 { font-size: 13px; font-weight: 600; margin: 0 0 10px; color: var(--muted); }
-    label.row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 6px 0;
-    }
-    input[type="range"] { width: 100%; accent-color: var(--blue); }
-    .chi { display: flex; align-items: center; gap: 10px; }
-    .chi output { width: 48px; text-align: right; font-weight: 600; }
-    .presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 14px; }
-    .presets button, aside button {
-      background: transparent;
-      color: var(--text);
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 4px 10px;
-      font: inherit;
-      cursor: pointer;
-    }
-    .presets button.active { background: #2a3140; border-color: #3d4a63; }
+    .toggle[aria-checked="true"] { background: var(--accent); }
+    .toggle[aria-checked="true"]::after { transform: translateX(14px); }
+
+    label.check { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    label.check input { accent-color: var(--accent); margin: 0; width: 14px; height: 14px; }
     .swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
-    footer {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 0 20px 32px;
-      color: var(--muted);
-      font-size: 12px;
+
+    .callout {
+      display: flex; align-items: flex-start; gap: 10px; width: 100%;
     }
-    @media (max-width: 800px) {
-      .wrap { grid-template-columns: 1fr; }
-      .viewport { height: 420px; }
-    }
+    .callout .icon { color: var(--chart-info); flex-shrink: 0; width: 12px; height: 19.5px; display: inline-flex; align-items: center; justify-content: center; }
+    .callout .title { font-weight: 500; }
+    .callout .body { color: var(--text); }
+
+    .chart { width: 100%; height: 260px; display: block; }
+    .chart text { fill: var(--text-3); font-size: 11px; font-family: inherit; }
+    .chart .grid-line { stroke: var(--stroke-2); }
+    .chart .axis { stroke: var(--stroke-1); }
+    .legend { gap: 14px; row-gap: 6px; font-size: 12px; color: var(--text-2); }
+    .legend i { display: inline-block; width: 12px; height: 2px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 8px 10px; border-bottom: 1px solid var(--stroke-2); text-align: left; }
+    th { color: var(--text-3); font-weight: 500; font-size: 12px; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    tr:last-child td { border-bottom: none; }
+
+    .card { border: 1px solid var(--stroke-2); border-radius: 8px; overflow: hidden; }
+    .card-header { padding: 10px 14px; border-bottom: 1px solid var(--stroke-2); font-weight: 500; background: var(--fill-4); }
+    .card-body { padding: 14px; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; background: var(--fill-3); padding: 2px 6px; border-radius: 4px; }
+    hr { border: none; border-top: 1px solid var(--stroke-2); margin: 4px 0; }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Kerr black hole</h1>
-    <p class="sub">M = 1 · nested spheres for the horizon, photon orbits, and observer-sky shadow. Drag to orbit.</p>
-  </header>
-  <div class="stats">
-    <div class="stat"><b id="vRh">—</b><span>Event horizon rh</span></div>
-    <div class="stat"><b id="vPro" style="color:var(--cyan)">—</b><span>Prograde photon sphere rPro</span></div>
-    <div class="stat"><b id="vRetro" style="color:var(--orange)">—</b><span>Retrograde photon sphere rRetro</span></div>
-    <div class="stat"><b id="vShadow" style="color:var(--purple)">—</b><span>Shadow radius</span></div>
-  </div>
-  <div class="wrap">
+  <main>
+    <div class="stack" style="gap:6px">
+      <h1>Kerr black hole</h1>
+      <p class="secondary">
+        Three-dimensional nested spheres for M = 1, with spin χ = a/M. The event horizon is a
+        sphere of radius rh; photon spheres are constant-r Kerr surfaces. Drag the model to
+        rotate. The triad in the top-right shows X, Y, and spin axis Z.
+      </p>
+    </div>
+
+    <div class="row wrap stats">
+      <div class="stat"><b id="vRh">—</b><span>Event horizon rh</span></div>
+      <div class="stat"><b id="vPro" style="color:var(--chart-info)">—</b><span>Prograde photon sphere rPro</span></div>
+      <div class="stat"><b id="vRetro" style="color:var(--chart-warning)">—</b><span>Retrograde photon sphere rRetro</span></div>
+      <div class="stat"><b id="vShadow">—</b><span>Shadow radius (observer sky)</span></div>
+    </div>
+
     <div class="viewport" id="viewport">
       <canvas id="scene"></canvas>
-      <canvas id="gizmo" width="96" height="96"></canvas>
       <div class="hint">Drag to orbit · scroll to zoom · units of M</div>
     </div>
-    <aside>
-      <h2>Spin χ = a/M</h2>
-      <div class="chi">
-        <input id="chi" type="range" min="0" max="0.998" step="0.002" value="0.8" />
-        <output id="chiOut">0.800</output>
+
+    <div class="grid">
+      <div class="stack" style="gap:12px">
+        <h2>Spin χ = a/M</h2>
+        <div class="row" style="gap:10px">
+          <input id="chi" type="range" min="0" max="0.998" step="0.002" value="0.8" aria-label="Dimensionless spin" />
+          <span class="chi-value" id="chiOut">0.800</span>
+        </div>
+        <div class="row wrap" style="gap:8px">
+          <button class="pill" data-chi="0">Schwarzschild 0</button>
+          <button class="pill" data-chi="0.5">Moderate 0.5</button>
+          <button class="pill active" data-chi="0.8">High 0.8</button>
+          <button class="pill" data-chi="0.94">Near-extremal 0.94</button>
+          <button class="pill" data-chi="0.998">Extremal 0.998</button>
+        </div>
+        <div class="row" style="gap:10px">
+          <span class="small">Auto-rotate</span>
+          <button class="toggle" id="autoRotate" role="switch" aria-checked="true" aria-label="Auto-rotate"></button>
+          <span class="small tertiary">Shadow table uses an equatorial observer (θ = 90°)</span>
+        </div>
       </div>
-      <div class="presets">
-        <button data-chi="0">Schwarzschild 0</button>
-        <button data-chi="0.5">0.5</button>
-        <button data-chi="0.8" class="active">0.8</button>
-        <button data-chi="0.94">0.94</button>
-        <button data-chi="0.998">0.998</button>
+
+      <div class="stack" style="gap:10px">
+        <h2>Surfaces</h2>
+        <label class="check"><input type="checkbox" id="lHorizon" checked /> Event horizon rh</label>
+        <label class="check"><input type="checkbox" id="lPro" checked /> Prograde photon sphere rPro</label>
+        <label class="check"><input type="checkbox" id="lRetro" checked /> Retrograde photon sphere rRetro</label>
+        <label class="check"><input type="checkbox" id="lShadow" checked /> Black hole shadow (critical curve)</label>
+        <label class="check"><input type="checkbox" id="lPhotons" checked /> Orbiting photons</label>
+        <label class="check"><input type="checkbox" id="lAxis" checked /> Spin axis in scene</label>
+        <div class="row wrap" style="gap:8px">
+          <span class="swatch" style="background:var(--text-3)"></span><span class="small">rh</span>
+          <span class="swatch" style="background:var(--cyan)"></span><span class="small">rPro</span>
+          <span class="swatch" style="background:var(--orange)"></span><span class="small">rRetro</span>
+          <span class="swatch" style="background:var(--purple)"></span><span class="small">shadow</span>
+        </div>
       </div>
-      <h2>Surfaces</h2>
-      <label class="row"><input type="checkbox" id="lHorizon" checked /> Event horizon rh</label>
-      <label class="row"><input type="checkbox" id="lPro" checked /> <span class="swatch" style="background:var(--cyan)"></span> rPro</label>
-      <label class="row"><input type="checkbox" id="lRetro" checked /> <span class="swatch" style="background:var(--orange)"></span> rRetro</label>
-      <label class="row"><input type="checkbox" id="lShadow" checked /> <span class="swatch" style="background:var(--purple)"></span> Shadow</label>
-      <label class="row"><input type="checkbox" id="lPhotons" checked /> Orbiting photons</label>
-      <label class="row"><input type="checkbox" id="lAxis" checked /> Spin axis in scene</label>
-      <label class="row"><input type="checkbox" id="lRotate" checked /> Auto-rotate</label>
-    </aside>
-  </div>
-  <footer>
-    rh(χ) = M (1 + √(1 − χ²)) · rPro / rRetro from Bardeen 1973 · shadow from Teo 2003.
-    χ = 0 → rh = 2M, photon sphere = 3M, shadow = 3√3 M. χ → 1 → rh = rPro = M, rRetro = 4M.
-  </footer>
+    </div>
+
+    <div class="callout">
+      <span class="icon" aria-hidden="true">
+        <svg width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="5.25" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M6 5.3v3.2M6 3.4v.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+      </span>
+      <div class="stack" style="gap:4px">
+        <div class="title">rh is the event horizon, not a photon sphere</div>
+        <div class="body">
+          The notebook defines rh as the outer Kerr horizon. Unstable circular photon orbits sit at
+          rPro (co-rotating) and rRetro (counter-rotating). The shadow is the capture cross-section on
+          the distant observer’s sky — larger than either photon sphere, and D-shaped when viewed near
+          the equator of a spinning hole. It is drawn on the sky plane, so it follows your viewing
+          inclination but not the hole’s rotation.
+        </div>
+      </div>
+    </div>
+
+    <h2>Radii versus spin</h2>
+    <p class="small secondary">
+      Geometric radii in units of M. Photon-sphere curves from the notebook; shadow radius is the
+      maximum impact parameter of the critical curve for an equatorial observer. Source: Kerr
+      geodesic formulae (Bardeen 1973; Teo 2003).
+    </p>
+    <svg class="chart" id="chart" role="img" aria-label="Radii versus spin"></svg>
+    <div class="row wrap legend">
+      <span><i style="background:var(--chart-neutral)"></i>Event horizon rh</span>
+      <span><i style="background:var(--chart-info)"></i>Prograde photon sphere rPro</span>
+      <span><i style="background:var(--chart-warning)"></i>Retrograde photon sphere rRetro</span>
+      <span><i style="background:var(--chart-danger)"></i>Shadow radius (equatorial)</span>
+    </div>
+    <p class="small tertiary">Horizontal axis: dimensionless spin χ = a/M. Vertical axis: radius (M).</p>
+
+    <h2>Current values</h2>
+    <table>
+      <thead><tr><th>Surface</th><th>Formula</th><th class="num">r / M</th></tr></thead>
+      <tbody>
+        <tr><td>Event horizon rh</td><td>M (1 + √(1 − χ²))</td><td class="num" id="tRh"></td></tr>
+        <tr><td>Prograde photon sphere rPro</td><td>2M (1 + cos(⅔ arccos(−χ)))</td><td class="num" id="tPro"></td></tr>
+        <tr><td>Retrograde photon sphere rRetro</td><td>2M (1 + cos(⅔ arccos(χ)))</td><td class="num" id="tRetro"></td></tr>
+        <tr><td>Shadow, left edge α</td><td>critical curve (Teo ξ, η)</td><td class="num" id="tLeft"></td></tr>
+        <tr><td>Shadow, right edge α</td><td>critical curve (Teo ξ, η)</td><td class="num" id="tRight"></td></tr>
+        <tr><td>Shadow diameter</td><td>α_right − α_left</td><td class="num" id="tDiam"></td></tr>
+      </tbody>
+    </table>
+
+    <h3>Equations (M = 1)</h3>
+    <div class="card">
+      <div class="card-header">Notebook definitions</div>
+      <div class="card-body stack" style="gap:8px">
+        <p><code>rh(χ) = M (1 + √(1 − χ²))</code></p>
+        <p><code>rPro(χ) = 2M (1 + Cos[⅔ ArcCos[−χ]])</code></p>
+        <p><code>rRetro(χ) = 2M (1 + Cos[⅔ ArcCos[χ]])</code></p>
+        <hr />
+        <p class="small secondary">
+          χ = 0 is Schwarzschild: rh = 2M, rPro = rRetro = 3M, shadow radius = 3√3 M ≈ 5.196 M.
+          χ → 1 is extremal Kerr: rh = rPro = M, rRetro = 4M. Prograde photons hug the horizon;
+          retrograde photons recede.
+        </p>
+      </div>
+    </div>
+  </main>
+
   <script>
     const M = 1;
     const CHI_MAX = 0.998;
     const REF_DIST = 22;
     const FIT_RADIUS = 10.2;
-    const colors = {
-      cyan: "#3db8d8",
-      orange: "#e08a3c",
-      purple: "#9b7ad6",
-      red: "#d45d5d",
-      green: "#5dbe7a",
-      blue: "#5b8def",
-      muted: "#9a9aa3",
-      hole: "#07080a",
-      limb: "#c8c8cc",
-    };
-
-    const state = {
-      chi: 0.8,
-      cam: { yaw: 0.55, pitch: 0.38, zoom: 1 },
-      drag: null,
-      phase: 0,
-      dirty: true,
-      geom: null,
-      cssW: 0,
-      cssH: 0,
-      layers: { horizon: true, pro: true, retro: true, shadow: true, photons: true, axis: true, rotate: true },
+    const theme = {
+      text: "#F0F0F0",
+      textSecondary: "#F0F0F0BD",
+      textTertiary: "#F0F0F099",
+      chrome: "#141414",
+      fillTertiary: "#F0F0F014",
+      strokeTertiary: "#F0F0F014",
+      cyan: "#81A1C1",
+      orange: "#DD7F76",
+      purple: "#9386F2",
+      red: "#FC6B83",
+      green: "#3FA266",
+      blue: "#7BAFE9",
     };
 
     const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -286,10 +363,14 @@
       }
       return silPts;
     }
-    function shadowWidth(chi) {
-      let maxR = 0;
-      for (const p of shadowSilhouette(chi, Math.PI / 2)) maxR = Math.max(maxR, Math.hypot(p.a, p.b));
-      return { radius: maxR };
+    function shadowWidth(chi, thetaObs) {
+      let minA = Infinity, maxA = -Infinity, maxR = 0;
+      for (const p of shadowSilhouette(chi, thetaObs)) {
+        minA = Math.min(minA, p.a);
+        maxA = Math.max(maxA, p.a);
+        maxR = Math.max(maxR, Math.hypot(p.a, p.b));
+      }
+      return { left: minA, right: maxA, radius: maxR, diameter: maxA - minA };
     }
 
     // Geometry is built once per spin value; only the camera changes per frame.
@@ -321,8 +402,8 @@
       const axis = [];
       for (let i = 0; i <= 8; i++) axis.push({ x: 0, y: 0, z: -7.2 + (14.4 * i) / 8 });
       const lines = [
-        ...wireLines(rR, kerrPoint, "retro", 2.4, 1),
-        ...wireLines(rP, kerrPoint, "pro", 2.4, 1),
+        ...wireLines(rR, kerrPoint, "retrograde", 2.4, 1),
+        ...wireLines(rP, kerrPoint, "prograde", 2.4, 1),
         ...wireLines(rH, sphereCart, "horizon", 1.4, 0.7),
         { layer: "axis", pts: axis, width: 1, alpha: 0.7 },
       ];
@@ -368,25 +449,36 @@
       return any;
     }
 
+    const state = {
+      chi: 0.8,
+      cam: { yaw: 0.55, pitch: 0.38, zoom: 1 },
+      drag: null,
+      phase: 0,
+      dirty: true,
+      geom: null,
+      autoRotate: true,
+      w: 0,
+      h: 0,
+      layers: { horizon: true, prograde: true, retrograde: true, shadow: true, axis: true, photons: true },
+    };
+
     const viewport = document.getElementById("viewport");
     const canvas = document.getElementById("scene");
-    const gizmo = document.getElementById("gizmo");
     const ctx = canvas.getContext("2d");
-    const gtx = gizmo.getContext("2d");
 
     function resize() {
       const rect = viewport.getBoundingClientRect();
+      state.w = Math.max(320, rect.width);
+      state.h = Math.max(360, rect.height);
       const dpr = Math.min(2, window.devicePixelRatio || 1);
-      state.cssW = rect.width;
-      state.cssH = rect.height;
-      canvas.width = Math.round(rect.width * dpr);
-      canvas.height = Math.round(rect.height * dpr);
-      canvas.style.width = rect.width + "px";
-      canvas.style.height = rect.height + "px";
+      canvas.width = Math.round(state.w * dpr);
+      canvas.height = Math.round(state.h * dpr);
+      canvas.style.width = state.w + "px";
+      canvas.style.height = state.h + "px";
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       state.dirty = true;
     }
-    window.addEventListener("resize", resize);
+    new ResizeObserver(resize).observe(viewport);
     resize();
 
     viewport.addEventListener("pointerdown", (e) => {
@@ -416,26 +508,46 @@
       state.dirty = true;
     }, { passive: false });
 
+    const fmt = (x) => x.toFixed(3) + " M";
     const chiInput = document.getElementById("chi");
     const chiOut = document.getElementById("chiOut");
+    const pills = Array.from(document.querySelectorAll(".pill"));
+    function pillActive(target, chi) {
+      if (target === 0) return chi < 0.02;
+      if (target === 0.5) return Math.abs(chi - 0.5) < 0.02;
+      if (target === 0.8) return Math.abs(chi - 0.8) < 0.02;
+      if (target === 0.94) return chi > 0.93 && chi < 0.96;
+      return chi >= 0.99;
+    }
     function setChi(v) {
-      state.chi = clamp(Number(v), 0, CHI_MAX);
-      state.geom = buildGeometry(state.chi);
+      const chi = clamp(Number(v), 0, CHI_MAX);
+      state.chi = chi;
+      state.geom = buildGeometry(chi);
       state.dirty = true;
-      chiInput.value = String(state.chi);
-      chiOut.textContent = state.chi.toFixed(3);
-      document.querySelectorAll(".presets button").forEach((b) => {
-        b.classList.toggle("active", Math.abs(Number(b.dataset.chi) - state.chi) < 0.015);
-      });
-      const fmt = (x) => x.toFixed(3) + " M";
-      document.getElementById("vRh").textContent = fmt(rh(state.chi));
-      document.getElementById("vPro").textContent = fmt(rPro(state.chi));
-      document.getElementById("vRetro").textContent = fmt(rRetro(state.chi));
-      document.getElementById("vShadow").textContent = fmt(shadowWidth(state.chi).radius);
+      chiInput.value = String(chi);
+      chiOut.textContent = chi.toFixed(3);
+      pills.forEach((b) => b.classList.toggle("active", pillActive(Number(b.dataset.chi), chi)));
+      const rH = rh(chi), rP = rPro(chi), rR = rRetro(chi);
+      const dims = shadowWidth(chi, Math.PI / 2);
+      document.getElementById("vRh").textContent = fmt(rH);
+      document.getElementById("vPro").textContent = fmt(rP);
+      document.getElementById("vRetro").textContent = fmt(rR);
+      document.getElementById("vShadow").textContent = fmt(dims.radius);
+      document.getElementById("tRh").textContent = rH.toFixed(4);
+      document.getElementById("tPro").textContent = rP.toFixed(4);
+      document.getElementById("tRetro").textContent = rR.toFixed(4);
+      document.getElementById("tLeft").textContent = dims.left.toFixed(4);
+      document.getElementById("tRight").textContent = dims.right.toFixed(4);
+      document.getElementById("tDiam").textContent = dims.diameter.toFixed(4);
     }
     chiInput.addEventListener("input", (e) => setChi(e.target.value));
-    document.querySelectorAll(".presets button").forEach((b) => {
-      b.addEventListener("click", () => setChi(b.dataset.chi));
+    pills.forEach((b) => b.addEventListener("click", () => setChi(b.dataset.chi)));
+
+    const toggle = document.getElementById("autoRotate");
+    toggle.addEventListener("click", () => {
+      state.autoRotate = !state.autoRotate;
+      toggle.setAttribute("aria-checked", String(state.autoRotate));
+      state.dirty = true;
     });
     const bind = (id, key) => {
       document.getElementById(id).addEventListener("change", (e) => {
@@ -444,19 +556,18 @@
       });
     };
     bind("lHorizon", "horizon");
-    bind("lPro", "pro");
-    bind("lRetro", "retro");
+    bind("lPro", "prograde");
+    bind("lRetro", "retrograde");
     bind("lShadow", "shadow");
     bind("lPhotons", "photons");
     bind("lAxis", "axis");
-    bind("lRotate", "rotate");
     setChi(0.8);
 
     function lineColor(layer) {
-      if (layer === "retro") return colors.orange;
-      if (layer === "pro") return colors.cyan;
-      if (layer === "horizon") return colors.limb;
-      return colors.muted;
+      if (layer === "retrograde") return theme.orange;
+      if (layer === "prograde") return theme.cyan;
+      if (layer === "horizon") return theme.textSecondary;
+      return theme.textTertiary;
     }
 
     function drawScene(w, h) {
@@ -466,8 +577,8 @@
       const tf = makeTransform(cam, w, h);
       const k = screenScale(cam.zoom, w, h);
 
-      ctx.clearRect(0, 0, w, h);
-
+      // Shadow: the critical curve lives on the observer's sky plane, so it is
+      // drawn directly in screen space (β along the projected spin axis).
       if (layers.shadow) {
         const sil = silhouetteCached(state.chi, Math.PI / 2 - cam.pitch);
         ctx.beginPath();
@@ -477,10 +588,10 @@
         }
         ctx.closePath();
         ctx.globalAlpha = 0.12;
-        ctx.fillStyle = colors.purple;
+        ctx.fillStyle = theme.purple;
         ctx.fill();
         ctx.globalAlpha = 0.95;
-        ctx.strokeStyle = colors.purple;
+        ctx.strokeStyle = theme.purple;
         ctx.lineWidth = 2.2;
         ctx.lineJoin = "round";
         ctx.stroke();
@@ -496,6 +607,7 @@
         ctx.lineJoin = "round";
         ctx.lineCap = "round";
         for (const { line, pts } of projected) {
+          // The back hemisphere of the horizon is hidden by the opaque disk.
           if (line.layer === "horizon" && !front) continue;
           ctx.beginPath();
           if (!addSegments(ctx, pts, front)) continue;
@@ -510,8 +622,8 @@
       const dots = [];
       if (layers.photons) {
         const { a, rP, rR } = geom;
-        if (layers.pro) dots.push({ p: tf(kerrCart(rP, Math.PI / 2, (state.phase * 2.8) / (rP ** 1.5 + a), a)), color: colors.cyan });
-        if (layers.retro) dots.push({ p: tf(kerrCart(rR, Math.PI / 2, (-state.phase * 2.8) / (rR ** 1.5 - a), a)), color: colors.orange });
+        if (layers.prograde) dots.push({ p: tf(kerrCart(rP, Math.PI / 2, (state.phase * 2.8) / (rP ** 1.5 + a), a)), color: theme.cyan });
+        if (layers.retrograde) dots.push({ p: tf(kerrCart(rR, Math.PI / 2, (-state.phase * 2.8) / (rR ** 1.5 - a), a)), color: theme.orange });
       }
       const drawDots = (front) => {
         for (const { p, color } of dots) {
@@ -528,10 +640,10 @@
       if (layers.horizon) {
         ctx.beginPath();
         ctx.arc(w / 2, h / 2, geom.rH * k, 0, Math.PI * 2);
-        ctx.fillStyle = colors.hole;
+        ctx.fillStyle = theme.chrome;
         ctx.fill();
         ctx.globalAlpha = 0.5;
-        ctx.strokeStyle = colors.limb;
+        ctx.strokeStyle = theme.textSecondary;
         ctx.lineWidth = 1;
         ctx.stroke();
         ctx.globalAlpha = 1;
@@ -541,7 +653,7 @@
 
       if (layers.axis) {
         const tip = tf({ x: 0, y: 0, z: 7.2 });
-        ctx.fillStyle = colors.muted;
+        ctx.fillStyle = theme.textTertiary;
         ctx.font = "11px ui-sans-serif, system-ui, sans-serif";
         ctx.textAlign = "left";
         ctx.textBaseline = "alphabetic";
@@ -549,73 +661,113 @@
       }
     }
 
-    function drawGizmo(cam) {
-      const cx = 48, cy = 48, radius = 28;
-      gtx.clearRect(0, 0, 96, 96);
-      gtx.beginPath();
-      gtx.arc(cx, cy, 46, 0, Math.PI * 2);
-      gtx.fillStyle = "rgba(255,255,255,0.06)";
-      gtx.fill();
-      gtx.strokeStyle = "rgba(255,255,255,0.12)";
-      gtx.lineWidth = 1;
-      gtx.stroke();
+    function drawGizmo(w, cam) {
+      const cx = w - 58, cy = 58, radius = 28;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 46, 0, Math.PI * 2);
+      ctx.fillStyle = theme.fillTertiary;
+      ctx.fill();
+      ctx.strokeStyle = theme.strokeTertiary;
+      ctx.lineWidth = 1;
+      ctx.stroke();
       const axes = [
-        { label: "X", vec: { x: 1, y: 0, z: 0 }, color: colors.red },
-        { label: "Y", vec: { x: 0, y: 1, z: 0 }, color: colors.green },
-        { label: "Z", vec: { x: 0, y: 0, z: 1 }, color: colors.blue },
+        { label: "X", vec: { x: 1, y: 0, z: 0 }, color: theme.red },
+        { label: "Y", vec: { x: 0, y: 1, z: 0 }, color: theme.green },
+        { label: "Z", vec: { x: 0, y: 0, z: 1 }, color: theme.blue },
       ].map((ax) => {
         const c = toCamera(ax.vec, cam);
         return { ...ax, x: c.x * radius, y: -c.z * radius, depth: c.y };
       }).sort((u, v) => u.depth - v.depth);
-      gtx.font = "600 11px ui-sans-serif, system-ui, sans-serif";
-      gtx.textAlign = "center";
-      gtx.textBaseline = "middle";
+      ctx.font = "600 11px ui-sans-serif, system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
       for (const ax of axes) {
         const tx = cx + ax.x, ty = cy + ax.y;
         const len = Math.hypot(ax.x, ax.y) || 1;
         const nx = ax.x / len, ny = ax.y / len;
-        gtx.strokeStyle = ax.color;
-        gtx.globalAlpha = 0.35;
-        gtx.lineWidth = 1.5;
-        gtx.beginPath();
-        gtx.moveTo(cx - ax.x * 0.35, cy - ax.y * 0.35);
-        gtx.lineTo(cx, cy);
-        gtx.stroke();
-        gtx.globalAlpha = 1;
-        gtx.lineWidth = 2;
-        gtx.beginPath();
-        gtx.moveTo(cx, cy);
-        gtx.lineTo(tx - nx * 7, ty - ny * 7);
-        gtx.stroke();
-        gtx.fillStyle = ax.color;
-        gtx.beginPath();
-        gtx.moveTo(tx, ty);
-        gtx.lineTo(tx - nx * 7 - ny * 3.2, ty - ny * 7 + nx * 3.2);
-        gtx.lineTo(tx - nx * 7 + ny * 3.2, ty - ny * 7 - nx * 3.2);
-        gtx.closePath();
-        gtx.fill();
-        gtx.fillText(ax.label, tx + nx * 10, ty + ny * 10);
+        ctx.strokeStyle = ax.color;
+        ctx.globalAlpha = 0.35;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(cx - ax.x * 0.35, cy - ax.y * 0.35);
+        ctx.lineTo(cx, cy);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(tx - nx * 7, ty - ny * 7);
+        ctx.stroke();
+        ctx.fillStyle = ax.color;
+        ctx.beginPath();
+        ctx.moveTo(tx, ty);
+        ctx.lineTo(tx - nx * 7 - ny * 3.2, ty - ny * 7 + nx * 3.2);
+        ctx.lineTo(tx - nx * 7 + ny * 3.2, ty - ny * 7 - nx * 3.2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillText(ax.label, tx + nx * 10, ty + ny * 10);
       }
-      gtx.fillStyle = colors.muted;
-      gtx.font = "9px ui-sans-serif, system-ui, sans-serif";
-      gtx.fillText("Z = spin", cx, 90);
+      ctx.fillStyle = theme.textTertiary;
+      ctx.font = "9px ui-sans-serif, system-ui, sans-serif";
+      ctx.fillText("Z = spin", cx, cy + 42);
     }
 
     let last = performance.now();
     function frame(now) {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      const rotating = state.layers.rotate && !state.drag;
+      const rotating = state.autoRotate && !state.drag;
+      const animating = rotating || state.layers.photons;
       if (rotating) state.cam.yaw += dt * 0.22;
       if (state.layers.photons) state.phase += dt;
-      if (rotating || state.layers.photons || state.dirty) {
+      if (animating || state.dirty) {
         state.dirty = false;
-        drawScene(state.cssW, state.cssH);
-        drawGizmo(state.cam);
+        ctx.clearRect(0, 0, state.w, state.h);
+        drawScene(state.w, state.h);
+        drawGizmo(state.w, state.cam);
       }
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
+
+    // Radii versus spin chart (static; mirrors the canvas LineChart).
+    const chartSvg = document.getElementById("chart");
+    function drawChart() {
+      const svg = chartSvg;
+      const W = Math.max(320, svg.clientWidth), H = 260, padL = 52, padR = 16, padT = 12, padB = 32;
+      svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+      const x0 = padL, x1 = W - padR, y0 = padT, y1 = H - padB;
+      const yMin = 0, yMax = 8;
+      const series = [
+        { color: "var(--chart-neutral)", f: (c) => rh(c) },
+        { color: "var(--chart-info)", f: (c) => rPro(c) },
+        { color: "var(--chart-warning)", f: (c) => rRetro(c) },
+        { color: "var(--chart-danger)", f: (c) => shadowWidth(c, Math.PI / 2).radius },
+      ];
+      const n = 20;
+      const xs = (i) => x0 + ((x1 - x0) * i) / n;
+      const ys = (v) => y1 - ((y1 - y0) * (v - yMin)) / (yMax - yMin);
+      let out = "";
+      for (let v = 0; v <= yMax; v += 2) {
+        out += `<line class="grid-line" x1="${x0}" x2="${x1}" y1="${ys(v)}" y2="${ys(v)}" vector-effect="non-scaling-stroke"/>`;
+        out += `<text x="${x0 - 8}" y="${ys(v) + 4}" text-anchor="end">${v} M</text>`;
+      }
+      out += `<line class="axis" x1="${x0}" x2="${x1}" y1="${y1}" y2="${y1}" vector-effect="non-scaling-stroke"/>`;
+      for (let i = 0; i <= n; i += 5) {
+        out += `<text x="${xs(i)}" y="${H - 10}" text-anchor="middle">${(i / n).toFixed(2)}</text>`;
+      }
+      for (const s of series) {
+        let d = "";
+        for (let i = 0; i <= n; i++) {
+          const c = Math.min(i / n, CHI_MAX);
+          d += (i === 0 ? "M" : "L") + xs(i).toFixed(1) + " " + ys(Number(s.f(c).toFixed(3))).toFixed(1) + " ";
+        }
+        out += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
+      }
+      svg.innerHTML = out;
+    }
+    drawChart();
+    new ResizeObserver(drawChart).observe(chartSvg);
   </script>
 </body>
 </html>
