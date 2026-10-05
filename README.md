@@ -16,7 +16,18 @@ python3 -m http.server 8000
 
 Then visit `http://localhost:8000`.
 
-**In Cursor:** open `kerr-black-hole.canvas.tsx` beside the chat.
+**In Cursor:** open `black-hole-shadow-sim/v2/kerr-black-hole.canvas.tsx` (or the newer `v2/v2.1/` canvas) beside the chat.
+
+## Layout
+
+| Path | Role |
+| --- | --- |
+| `index.html` | Live GitHub Pages viewer |
+| `black-hole-shadow-sim/v1/` | Earlier HTML + canvas |
+| `black-hole-shadow-sim/v2/` | Merged v2 sources (canvas at this level + `v2.1/`) |
+| `black-hole-shadow-sim/v2/v2.1/` | Latest v2 HTML (`v2index.html`) and canvas |
+
+All former root `v2/` files now live under `black-hole-shadow-sim/v2/`.
 
 ## Surfaces
 
