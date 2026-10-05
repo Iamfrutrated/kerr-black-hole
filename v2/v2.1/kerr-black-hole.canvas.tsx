@@ -497,10 +497,12 @@ function Viewport({
   chi,
   layers,
   autoRotate,
+  invertDrag,
 }: {
   chi: number;
   layers: Layers;
   autoRotate: boolean;
+  invertDrag: boolean;
 }) {
   const theme = useHostTheme();
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -617,7 +619,8 @@ function Viewport({
         if (!start) return;
         const cam = camRef.current;
         cam.yaw = start.yaw + (event.clientX - start.x) * 0.008;
-        cam.pitch = clamp(start.pitch + (event.clientY - start.y) * 0.008, -1.15, 1.15);
+        const dy = (event.clientY - start.y) * (invertDrag ? -1 : 1);
+        cam.pitch = clamp(start.pitch + dy * 0.008, -1.15, 1.15);
         dirtyRef.current = true;
       }}
       onPointerUp={() => {
@@ -650,6 +653,7 @@ export default function KerrBlackHoleModel() {
   const theme = useHostTheme();
   const [chi, setChi] = useCanvasState("chi", 0.8);
   const [autoRotate, setAutoRotate] = useCanvasState("autoRotate", true);
+  const [invertDrag, setInvertDrag] = useCanvasState("invertDrag", false);
   const [horizon, setHorizon] = useCanvasState("layer-horizon", true);
   const [prograde, setPrograde] = useCanvasState("layer-pro", true);
   const [retrograde, setRetrograde] = useCanvasState("layer-retro", true);
@@ -701,7 +705,7 @@ export default function KerrBlackHoleModel() {
         <Stat value={fmt(shadowDims.radius)} label="Shadow radius (observer sky)" />
       </Row>
 
-      <Viewport chi={chiClamped} layers={layers} autoRotate={autoRotate} />
+      <Viewport chi={chiClamped} layers={layers} autoRotate={autoRotate} invertDrag={invertDrag} />
 
       <Grid columns="1.4fr 1fr" gap={16}>
         <Stack gap={12}>
@@ -738,9 +742,11 @@ export default function KerrBlackHoleModel() {
               Extremal 0.998
             </Pill>
           </Row>
-          <Row gap={10} align="center">
+          <Row gap={10} align="center" wrap>
             <Text size="small">Auto-rotate</Text>
             <Toggle checked={autoRotate} onChange={setAutoRotate} />
+            <Text size="small">Invert vertical drag</Text>
+            <Toggle checked={invertDrag} onChange={setInvertDrag} />
             <Text size="small" tone="tertiary">
               Shadow table uses an equatorial observer (θ = 90°)
             </Text>

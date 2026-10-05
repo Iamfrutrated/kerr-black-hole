@@ -165,9 +165,11 @@
           <button class="pill" data-chi="0.94">Near-extremal 0.94</button>
           <button class="pill" data-chi="0.998">Extremal 0.998</button>
         </div>
-        <div class="row" style="gap:10px">
+        <div class="row wrap" style="gap:10px">
           <span class="small">Auto-rotate</span>
           <button class="toggle" id="autoRotate" role="switch" aria-checked="true" aria-label="Auto-rotate"></button>
+          <span class="small">Invert vertical drag</span>
+          <button class="toggle" id="invertDrag" role="switch" aria-checked="false" aria-label="Invert vertical drag"></button>
           <span class="small tertiary">Shadow table uses an equatorial observer (θ = 90°)</span>
         </div>
       </div>
@@ -457,6 +459,7 @@
       dirty: true,
       geom: null,
       autoRotate: true,
+      invertDrag: false,
       w: 0,
       h: 0,
       layers: { horizon: true, prograde: true, retrograde: true, shadow: true, axis: true, photons: true },
@@ -510,7 +513,8 @@
     viewport.addEventListener("pointermove", (e) => {
       if (!state.drag) return;
       state.cam.yaw = state.drag.yaw + (e.clientX - state.drag.x) * 0.008;
-      state.cam.pitch = clamp(state.drag.pitch + (e.clientY - state.drag.y) * 0.008, -1.15, 1.15);
+      const dy = (e.clientY - state.drag.y) * (state.invertDrag ? -1 : 1);
+      state.cam.pitch = clamp(state.drag.pitch + dy * 0.008, -1.15, 1.15);
       state.dirty = true;
     });
     const endDrag = () => {
@@ -569,6 +573,11 @@
       state.autoRotate = !state.autoRotate;
       toggle.setAttribute("aria-checked", String(state.autoRotate));
       state.dirty = true;
+    });
+    const invertToggle = document.getElementById("invertDrag");
+    invertToggle.addEventListener("click", () => {
+      state.invertDrag = !state.invertDrag;
+      invertToggle.setAttribute("aria-checked", String(state.invertDrag));
     });
     const bind = (id, key) => {
       document.getElementById(id).addEventListener("change", (e) => {
