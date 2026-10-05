@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kerr black hole</title>
+  <style>
+    :root {
+      --bg: #101114;
+      --panel: #16181d;
+      --text: #ececec;
+      --muted: #9a9aa3;
+      --line: #2a2d34;
+      --cyan: #3db8d8;
+      --orange: #e08a3c;
+      --purple: #9b7ad6;
+      --red: #d45d5d;
+      --green: #5dbe7a;
+      --blue: #5b8def;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      font: 14px/1.45 ui-sans-serif, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      padding: 16px 20px 8px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 22px; font-weight: 600; margin: 0 0 6px; }
+    .sub { color: var(--muted); margin: 0; }
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px 28px;
+      max-width: 1100px;
+      margin: 8px auto 0;
+      padding: 0 20px 12px;
+    }
+    .stat b { display: block; font-size: 18px; font-weight: 600; }
+    .stat span { color: var(--muted); font-size: 12px; }
+    .wrap {
+      display: grid;
+      grid-template-columns: minmax(0, 1.6fr) 280px;
+      gap: 16px;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 20px 24px;
+    }
+    .viewport {
+      position: relative;
+      height: 560px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #0c0d10;
+      cursor: grab;
+      touch-action: none;
+      overscroll-behavior: contain;
+    }
+    .viewport.dragging { cursor: grabbing; }
+    canvas#scene { display: block; position: absolute; inset: 0; }
+    canvas#gizmo {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 96px;
+      height: 96px;
+      pointer-events: none;
+    }
+    .hint {
+      position: absolute;
+      left: 12px;
+      bottom: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      pointer-events: none;
+    }
+    aside {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: var(--panel);
+    }
+    h2 { font-size: 13px; font-weight: 600; margin: 0 0 10px; color: var(--muted); }
+    label.row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 6px 0;
+    }
+    input[type="range"] { width: 100%; accent-color: var(--blue); }
+    .chi { display: flex; align-items: center; gap: 10px; }
+    .chi output { width: 48px; text-align: right; font-weight: 600; }
+    .presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 14px; }
+    .presets button, aside button {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font: inherit;
+      cursor: pointer;
+    }
+    .presets button.active { background: #2a3140; border-color: #3d4a63; }
+    .swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+    footer {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 20px 32px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    @media (max-width: 800px) {
+      .wrap { grid-template-columns: 1fr; }
+      .viewport { height: 420px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Kerr black hole</h1>
+    <p class="sub">M = 1 · nested spheres for the horizon, photon orbits, and observer-sky shadow. Drag to orbit.</p>
+  </header>
+  <div class="stats">
+    <div class="stat"><b id="vRh">—</b><span>Event horizon rh</span></div>
+    <div class="stat"><b id="vPro" style="color:var(--cyan)">—</b><span>Prograde photon sphere rPro</span></div>
+    <div class="stat"><b id="vRetro" style="color:var(--orange)">—</b><span>Retrograde photon sphere rRetro</span></div>
+    <div class="stat"><b id="vShadow" style="color:var(--purple)">—</b><span>Shadow radius</span></div>
+  </div>
+  <div class="wrap">
+    <div class="viewport" id="viewport">
+      <canvas id="scene"></canvas>
+      <canvas id="gizmo" width="96" height="96"></canvas>
+      <div class="hint">Drag to orbit · scroll to zoom · units of M</div>
+    </div>
+    <aside>
+      <h2>Spin χ = a/M</h2>
+      <div class="chi">
+        <input id="chi" type="range" min="0" max="0.998" step="0.002" value="0.8" />
+        <output id="chiOut">0.800</output>
+      </div>
+      <div class="presets">
+        <button data-chi="0">Schwarzschild 0</button>
+        <button data-chi="0.5">0.5</button>
+        <button data-chi="0.8" class="active">0.8</button>
+        <button data-chi="0.94">0.94</button>
+        <button data-chi="0.998">0.998</button>
+      </div>
+      <h2>Surfaces</h2>
+      <label class="row"><input type="checkbox" id="lHorizon" checked /> Event horizon rh</label>
+      <label class="row"><input type="checkbox" id="lPro" checked /> <span class="swatch" style="background:var(--cyan)"></span> rPro</label>
+      <label class="row"><input type="checkbox" id="lRetro" checked /> <span class="swatch" style="background:var(--orange)"></span> rRetro</label>
+      <label class="row"><input type="checkbox" id="lShadow" checked /> <span class="swatch" style="background:var(--purple)"></span> Shadow</label>
+      <label class="row"><input type="checkbox" id="lPhotons" checked /> Orbiting photons</label>
+      <label class="row"><input type="checkbox" id="lAxis" checked /> Spin axis in scene</label>
+      <label class="row"><input type="checkbox" id="lRotate" checked /> Auto-rotate</label>
+    </aside>
+  </div>
+  <footer>
+    rh(χ) = M (1 + √(1 − χ²)) · rPro / rRetro from Bardeen 1973 · shadow from Teo 2003.
+    χ = 0 → rh = 2M, photon sphere = 3M, shadow = 3√3 M. χ → 1 → rh = rPro = M, rRetro = 4M.
+  </footer>
+  <script>
+    const M = 1;
+    const CHI_MAX = 0.998;
+    const REF_DIST = 22;
+    const FIT_RADIUS = 10.2;
+    const colors = {
+      cyan: "#3db8d8",
+      orange: "#e08a3c",
+      purple: "#9b7ad6",
+      red: "#d45d5d",
+      green: "#5dbe7a",
+      blue: "#5b8def",
+      muted: "#9a9aa3",
+      hole: "#07080a",
+      limb: "#c8c8cc",
+    };
+
+    const state = {
+      chi: 0.8,
+      cam: { yaw: 0.55, pitch: 0.38, zoom: 1 },
+      drag: null,
+      phase: 0,
+      dirty: true,
+      geom: null,
+      cssW: 0,
+      cssH: 0,
+      layers: { horizon: true, pro: true, retro: true, shadow: true, photons: true, axis: true, rotate: true },
+    };
+
+    const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+    const rh = (c) => M * (1 + Math.sqrt(Math.max(0, 1 - c * c)));
+    const rPro = (c) => 2 * M * (1 + Math.cos((2 / 3) * Math.acos(-c)));
+    const rRetro = (c) => 2 * M * (1 + Math.cos((2 / 3) * Math.acos(c)));
+
+    function sphereCart(r, theta, phi) {
+      const s = Math.sin(theta);
+      return { x: r * s * Math.cos(phi), y: r * s * Math.sin(phi), z: r * Math.cos(theta) };
+    }
+    function kerrCart(r, theta, phi, a) {
+      const rho = Math.sqrt(r * r + a * a);
+      const s = Math.sin(theta);
+      return { x: rho * s * Math.cos(phi), y: rho * s * Math.sin(phi), z: r * Math.cos(theta) };
+    }
+    function teoXi(r, a) {
+      return -(r ** 3 - 3 * M * r ** 2 + a * a * r + a * a * M) / (a * (r - M));
+    }
+    function teoEta(r, a) {
+      return (r ** 3 * (4 * a * a * M - r * (r - 3 * M) ** 2)) / (a * a * (r - M) ** 2);
+    }
+
+    // Critical curve on the observer's sky. The r-range of valid spherical
+    // photon orbits is found by root-finding and sampled with cosine spacing so
+    // both ends of the D close at β = 0 instead of ending in a straight chord.
+    function shadowSilhouette(chi, thetaObs) {
+      const th = clamp(thetaObs, 0.05, Math.PI - 0.05);
+      const n = 128;
+      const circle = (R) => {
+        const pts = [];
+        for (let i = 0; i <= n; i++) {
+          const ang = (i / n) * Math.PI * 2;
+          pts.push({ a: R * Math.cos(ang), b: R * Math.sin(ang) });
+        }
+        return pts;
+      };
+      if (chi < 1e-3) return circle(3 * Math.sqrt(3) * M);
+      const spin = chi * M;
+      const sinT = Math.sin(th), cosT = Math.cos(th);
+      const cot2 = (cosT * cosT) / (sinT * sinT);
+      const disc = (r) => {
+        const xi = teoXi(r, spin);
+        return teoEta(r, spin) + spin * spin * cosT * cosT - xi * xi * cot2;
+      };
+      const rLo = rPro(chi), rHi = rRetro(chi);
+      const N = 256;
+      const grid = (i) => rLo + ((rHi - rLo) * i) / N;
+      let iFirst = -1, iLast = -1;
+      for (let i = 0; i <= N; i++) {
+        if (disc(grid(i)) >= 0) {
+          if (iFirst < 0) iFirst = i;
+          iLast = i;
+        }
+      }
+      if (iFirst < 0) return circle(3 * Math.sqrt(3) * M);
+      let rMin = grid(iFirst);
+      if (iFirst > 0) {
+        let lo = grid(iFirst - 1), hi = rMin;
+        for (let k = 0; k < 40; k++) {
+          const mid = 0.5 * (lo + hi);
+          if (disc(mid) >= 0) hi = mid; else lo = mid;
+        }
+        rMin = hi;
+      }
+      let rMax = grid(iLast);
+      if (iLast < N) {
+        let lo = rMax, hi = grid(iLast + 1);
+        for (let k = 0; k < 40; k++) {
+          const mid = 0.5 * (lo + hi);
+          if (disc(mid) >= 0) lo = mid; else hi = mid;
+        }
+        rMax = lo;
+      }
+      const upper = [], lower = [];
+      for (let i = 0; i <= n; i++) {
+        const t = 0.5 * (1 - Math.cos((Math.PI * i) / n));
+        const r = rMin + (rMax - rMin) * t;
+        const alpha = -teoXi(r, spin) / sinT;
+        const beta = Math.sqrt(Math.max(0, disc(r)));
+        upper.push({ a: alpha, b: beta });
+        lower.push({ a: alpha, b: -beta });
+      }
+      lower.reverse();
+      return upper.concat(lower);
+    }
+    let silKey = "", silPts = [];
+    function silhouetteCached(chi, thetaObs) {
+      const key = chi.toFixed(4) + "|" + thetaObs.toFixed(3);
+      if (key !== silKey) {
+        silKey = key;
+        silPts = shadowSilhouette(chi, thetaObs);
+      }
+      return silPts;
+    }
+    function shadowWidth(chi) {
+      let maxR = 0;
+      for (const p of shadowSilhouette(chi, Math.PI / 2)) maxR = Math.max(maxR, Math.hypot(p.a, p.b));
+      return { radius: maxR };
+    }
+
+    // Geometry is built once per spin value; only the camera changes per frame.
+    function wireLines(r, point, layer, ringWidth, ringAlpha) {
+      const lines = [];
+      const meridians = 10, parallels = 8;
+      for (let m = 0; m < meridians; m++) {
+        const phi = (m / meridians) * Math.PI * 2;
+        const pts = [];
+        for (let i = 0; i <= 32; i++) pts.push(point(r, (i / 32) * Math.PI, phi));
+        lines.push({ layer, pts, width: 1, alpha: 0.55 });
+      }
+      for (let p = 1; p < parallels; p++) {
+        if (p * 2 === parallels) continue;
+        const theta = (p / parallels) * Math.PI;
+        const pts = [];
+        for (let i = 0; i <= 48; i++) pts.push(point(r, theta, (i / 48) * Math.PI * 2));
+        lines.push({ layer, pts, width: 1, alpha: 0.4 });
+      }
+      const ring = [];
+      for (let i = 0; i <= 96; i++) ring.push(point(r, Math.PI / 2, (i / 96) * Math.PI * 2));
+      lines.push({ layer, pts: ring, width: ringWidth, alpha: ringAlpha });
+      return lines;
+    }
+    function buildGeometry(chi) {
+      const a = chi * M;
+      const rH = rh(chi), rP = rPro(chi), rR = rRetro(chi);
+      const kerrPoint = (r, th, ph) => kerrCart(r, th, ph, a);
+      const axis = [];
+      for (let i = 0; i <= 8; i++) axis.push({ x: 0, y: 0, z: -7.2 + (14.4 * i) / 8 });
+      const lines = [
+        ...wireLines(rR, kerrPoint, "retro", 2.4, 1),
+        ...wireLines(rP, kerrPoint, "pro", 2.4, 1),
+        ...wireLines(rH, sphereCart, "horizon", 1.4, 0.7),
+        { layer: "axis", pts: axis, width: 1, alpha: 0.7 },
+      ];
+      return { a, rH, rP, rR, lines };
+    }
+
+    function toCamera(p, cam) {
+      const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+      const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+      const x1 = p.x * cy - p.y * sy;
+      const y1 = p.x * sy + p.y * cy;
+      return { x: x1, y: y1 * cp - p.z * sp, z: y1 * sp + p.z * cp };
+    }
+    function screenScale(zoom, w, h) {
+      return ((Math.min(w, h) * 0.44) / FIT_RADIUS) * zoom;
+    }
+    function makeTransform(cam, w, h) {
+      const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+      const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+      const k = screenScale(cam.zoom, w, h);
+      const cx = w / 2, cz = h / 2;
+      return (p) => {
+        const x1 = p.x * cy - p.y * sy;
+        const y1 = p.x * sy + p.y * cy;
+        const d = y1 * cp - p.z * sp;
+        const z = y1 * sp + p.z * cp;
+        const persp = 1 / Math.max(0.72, 1 - 0.12 * (d / REF_DIST));
+        return { x: cx + x1 * k * persp, y: cz - z * k * persp, d };
+      };
+    }
+    function addSegments(ctx, pts, front) {
+      let open = false, any = false;
+      for (let i = 1; i < pts.length; i++) {
+        const p = pts[i - 1], q = pts[i];
+        if ((p.d + q.d >= 0) === front) {
+          if (!open) { ctx.moveTo(p.x, p.y); open = true; }
+          ctx.lineTo(q.x, q.y);
+          any = true;
+        } else {
+          open = false;
+        }
+      }
+      return any;
+    }
+
+    const viewport = document.getElementById("viewport");
+    const canvas = document.getElementById("scene");
+    const gizmo = document.getElementById("gizmo");
+    const ctx = canvas.getContext("2d");
+    const gtx = gizmo.getContext("2d");
+
+    function resize() {
+      const rect = viewport.getBoundingClientRect();
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      state.cssW = rect.width;
+      state.cssH = rect.height;
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
+      canvas.style.width = rect.width + "px";
+      canvas.style.height = rect.height + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      state.dirty = true;
+    }
+    window.addEventListener("resize", resize);
+    resize();
+
+    viewport.addEventListener("pointerdown", (e) => {
+      viewport.setPointerCapture(e.pointerId);
+      viewport.classList.add("dragging");
+      state.drag = { x: e.clientX, y: e.clientY, yaw: state.cam.yaw, pitch: state.cam.pitch };
+    });
+    viewport.addEventListener("pointermove", (e) => {
+      if (!state.drag) return;
+      state.cam.yaw = state.drag.yaw + (e.clientX - state.drag.x) * 0.008;
+      state.cam.pitch = clamp(state.drag.pitch + (e.clientY - state.drag.y) * 0.008, -1.15, 1.15);
+      state.dirty = true;
+    });
+    const endDrag = () => {
+      state.drag = null;
+      viewport.classList.remove("dragging");
+    };
+    viewport.addEventListener("pointerup", endDrag);
+    viewport.addEventListener("pointercancel", endDrag);
+    viewport.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      let dy = e.deltaY;
+      if (e.deltaMode === 1) dy *= 16;
+      if (e.deltaMode === 2) dy *= 40;
+      state.cam.zoom = clamp(state.cam.zoom * Math.exp(-dy * 0.0018), 0.35, 3.5);
+      state.dirty = true;
+    }, { passive: false });
+
+    const chiInput = document.getElementById("chi");
+    const chiOut = document.getElementById("chiOut");
+    function setChi(v) {
+      state.chi = clamp(Number(v), 0, CHI_MAX);
+      state.geom = buildGeometry(state.chi);
+      state.dirty = true;
+      chiInput.value = String(state.chi);
+      chiOut.textContent = state.chi.toFixed(3);
+      document.querySelectorAll(".presets button").forEach((b) => {
+        b.classList.toggle("active", Math.abs(Number(b.dataset.chi) - state.chi) < 0.015);
+      });
+      const fmt = (x) => x.toFixed(3) + " M";
+      document.getElementById("vRh").textContent = fmt(rh(state.chi));
+      document.getElementById("vPro").textContent = fmt(rPro(state.chi));
+      document.getElementById("vRetro").textContent = fmt(rRetro(state.chi));
+      document.getElementById("vShadow").textContent = fmt(shadowWidth(state.chi).radius);
+    }
+    chiInput.addEventListener("input", (e) => setChi(e.target.value));
+    document.querySelectorAll(".presets button").forEach((b) => {
+      b.addEventListener("click", () => setChi(b.dataset.chi));
+    });
+    const bind = (id, key) => {
+      document.getElementById(id).addEventListener("change", (e) => {
+        state.layers[key] = e.target.checked;
+        state.dirty = true;
+      });
+    };
+    bind("lHorizon", "horizon");
+    bind("lPro", "pro");
+    bind("lRetro", "retro");
+    bind("lShadow", "shadow");
+    bind("lPhotons", "photons");
+    bind("lAxis", "axis");
+    bind("lRotate", "rotate");
+    setChi(0.8);
+
+    function lineColor(layer) {
+      if (layer === "retro") return colors.orange;
+      if (layer === "pro") return colors.cyan;
+      if (layer === "horizon") return colors.limb;
+      return colors.muted;
+    }
+
+    function drawScene(w, h) {
+      const cam = state.cam;
+      const layers = state.layers;
+      const geom = state.geom;
+      const tf = makeTransform(cam, w, h);
+      const k = screenScale(cam.zoom, w, h);
+
+      ctx.clearRect(0, 0, w, h);
+
+      if (layers.shadow) {
+        const sil = silhouetteCached(state.chi, Math.PI / 2 - cam.pitch);
+        ctx.beginPath();
+        for (let i = 0; i < sil.length; i++) {
+          const x = w / 2 + sil[i].a * k, y = h / 2 - sil[i].b * k;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.globalAlpha = 0.12;
+        ctx.fillStyle = colors.purple;
+        ctx.fill();
+        ctx.globalAlpha = 0.95;
+        ctx.strokeStyle = colors.purple;
+        ctx.lineWidth = 2.2;
+        ctx.lineJoin = "round";
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+
+      const projected = [];
+      for (const line of geom.lines) {
+        if (!layers[line.layer]) continue;
+        projected.push({ line, pts: line.pts.map(tf) });
+      }
+      const pass = (front) => {
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        for (const { line, pts } of projected) {
+          if (line.layer === "horizon" && !front) continue;
+          ctx.beginPath();
+          if (!addSegments(ctx, pts, front)) continue;
+          ctx.globalAlpha = line.alpha;
+          ctx.strokeStyle = lineColor(line.layer);
+          ctx.lineWidth = line.width;
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      };
+
+      const dots = [];
+      if (layers.photons) {
+        const { a, rP, rR } = geom;
+        if (layers.pro) dots.push({ p: tf(kerrCart(rP, Math.PI / 2, (state.phase * 2.8) / (rP ** 1.5 + a), a)), color: colors.cyan });
+        if (layers.retro) dots.push({ p: tf(kerrCart(rR, Math.PI / 2, (-state.phase * 2.8) / (rR ** 1.5 - a), a)), color: colors.orange });
+      }
+      const drawDots = (front) => {
+        for (const { p, color } of dots) {
+          if ((p.d >= 0) !== front) continue;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2);
+          ctx.fillStyle = color;
+          ctx.fill();
+        }
+      };
+
+      pass(false);
+      drawDots(false);
+      if (layers.horizon) {
+        ctx.beginPath();
+        ctx.arc(w / 2, h / 2, geom.rH * k, 0, Math.PI * 2);
+        ctx.fillStyle = colors.hole;
+        ctx.fill();
+        ctx.globalAlpha = 0.5;
+        ctx.strokeStyle = colors.limb;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      pass(true);
+      drawDots(true);
+
+      if (layers.axis) {
+        const tip = tf({ x: 0, y: 0, z: 7.2 });
+        ctx.fillStyle = colors.muted;
+        ctx.font = "11px ui-sans-serif, system-ui, sans-serif";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "alphabetic";
+        ctx.fillText("spin", tip.x + 6, tip.y - 4);
+      }
+    }
+
+    function drawGizmo(cam) {
+      const cx = 48, cy = 48, radius = 28;
+      gtx.clearRect(0, 0, 96, 96);
+      gtx.beginPath();
+      gtx.arc(cx, cy, 46, 0, Math.PI * 2);
+      gtx.fillStyle = "rgba(255,255,255,0.06)";
+      gtx.fill();
+      gtx.strokeStyle = "rgba(255,255,255,0.12)";
+      gtx.lineWidth = 1;
+      gtx.stroke();
+      const axes = [
+        { label: "X", vec: { x: 1, y: 0, z: 0 }, color: colors.red },
+        { label: "Y", vec: { x: 0, y: 1, z: 0 }, color: colors.green },
+        { label: "Z", vec: { x: 0, y: 0, z: 1 }, color: colors.blue },
+      ].map((ax) => {
+        const c = toCamera(ax.vec, cam);
+        return { ...ax, x: c.x * radius, y: -c.z * radius, depth: c.y };
+      }).sort((u, v) => u.depth - v.depth);
+      gtx.font = "600 11px ui-sans-serif, system-ui, sans-serif";
+      gtx.textAlign = "center";
+      gtx.textBaseline = "middle";
+      for (const ax of axes) {
+        const tx = cx + ax.x, ty = cy + ax.y;
+        const len = Math.hypot(ax.x, ax.y) || 1;
+        const nx = ax.x / len, ny = ax.y / len;
+        gtx.strokeStyle = ax.color;
+        gtx.globalAlpha = 0.35;
+        gtx.lineWidth = 1.5;
+        gtx.beginPath();
+        gtx.moveTo(cx - ax.x * 0.35, cy - ax.y * 0.35);
+        gtx.lineTo(cx, cy);
+        gtx.stroke();
+        gtx.globalAlpha = 1;
+        gtx.lineWidth = 2;
+        gtx.beginPath();
+        gtx.moveTo(cx, cy);
+        gtx.lineTo(tx - nx * 7, ty - ny * 7);
+        gtx.stroke();
+        gtx.fillStyle = ax.color;
+        gtx.beginPath();
+        gtx.moveTo(tx, ty);
+        gtx.lineTo(tx - nx * 7 - ny * 3.2, ty - ny * 7 + nx * 3.2);
+        gtx.lineTo(tx - nx * 7 + ny * 3.2, ty - ny * 7 - nx * 3.2);
+        gtx.closePath();
+        gtx.fill();
+        gtx.fillText(ax.label, tx + nx * 10, ty + ny * 10);
+      }
+      gtx.fillStyle = colors.muted;
+      gtx.font = "9px ui-sans-serif, system-ui, sans-serif";
+      gtx.fillText("Z = spin", cx, 90);
+    }
+
+    let last = performance.now();
+    function frame(now) {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      const rotating = state.layers.rotate && !state.drag;
+      if (rotating) state.cam.yaw += dt * 0.22;
+      if (state.layers.photons) state.phase += dt;
+      if (rotating || state.layers.photons || state.dirty) {
+        state.dirty = false;
+        drawScene(state.cssW, state.cssH);
+        drawGizmo(state.cam);
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>
