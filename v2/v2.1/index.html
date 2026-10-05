@@ -67,7 +67,7 @@
       user-select: none;
     }
     .viewport.dragging { cursor: grabbing; }
-    canvas#scene { display: block; position: absolute; inset: 0; }
+    canvas#scene { display: block; position: absolute; top: 0; left: 0; }
     .hint { position: absolute; left: 12px; bottom: 12px; color: var(--text-3); font-size: 12px; pointer-events: none; }
 
     .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
@@ -478,8 +478,29 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       state.dirty = true;
     }
-    new ResizeObserver(resize).observe(viewport);
+    if (typeof ResizeObserver === "function") new ResizeObserver(resize).observe(viewport);
+    window.addEventListener("resize", resize);
     resize();
+
+    // Render loop starts immediately; geometry is attached by setChi below.
+    let last = performance.now();
+    function frame(now) {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      const rotating = state.autoRotate && !state.drag;
+      const animating = rotating || state.layers.photons;
+      if (rotating) state.cam.yaw += dt * 0.22;
+      if (state.layers.photons) state.phase += dt;
+      if (state.geom && (animating || state.dirty)) {
+        state.dirty = false;
+        ctx.clearRect(0, 0, state.w, state.h);
+        drawScene(state.w, state.h);
+        drawGizmo(state.w, state.cam);
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+    state.geom = buildGeometry(state.chi);
 
     viewport.addEventListener("pointerdown", (e) => {
       viewport.setPointerCapture(e.pointerId);
@@ -712,29 +733,11 @@
       ctx.fillText("Z = spin", cx, cy + 42);
     }
 
-    let last = performance.now();
-    function frame(now) {
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
-      const rotating = state.autoRotate && !state.drag;
-      const animating = rotating || state.layers.photons;
-      if (rotating) state.cam.yaw += dt * 0.22;
-      if (state.layers.photons) state.phase += dt;
-      if (animating || state.dirty) {
-        state.dirty = false;
-        ctx.clearRect(0, 0, state.w, state.h);
-        drawScene(state.w, state.h);
-        drawGizmo(state.w, state.cam);
-      }
-      requestAnimationFrame(frame);
-    }
-    requestAnimationFrame(frame);
-
     // Radii versus spin chart (static; mirrors the canvas LineChart).
     const chartSvg = document.getElementById("chart");
     function drawChart() {
       const svg = chartSvg;
-      const W = Math.max(320, svg.clientWidth), H = 260, padL = 52, padR = 16, padT = 12, padB = 32;
+      const W = Math.max(320, svg.getBoundingClientRect().width), H = 260, padL = 52, padR = 16, padT = 12, padB = 32;
       svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
       const x0 = padL, x1 = W - padR, y0 = padT, y1 = H - padB;
       const yMin = 0, yMax = 8;
@@ -766,8 +769,13 @@
       }
       svg.innerHTML = out;
     }
-    drawChart();
-    new ResizeObserver(drawChart).observe(chartSvg);
+    try {
+      drawChart();
+      if (typeof ResizeObserver === "function") new ResizeObserver(drawChart).observe(chartSvg);
+      else window.addEventListener("resize", drawChart);
+    } catch (err) {
+      console.error("chart", err);
+    }
   </script>
 </body>
 </html>
