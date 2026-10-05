@@ -22,12 +22,17 @@ Then visit `http://localhost:8000`.
 
 | Path | Role |
 | --- | --- |
-| `index.html` | Live GitHub Pages viewer |
-| `black-hole-shadow-sim/v1/` | Earlier HTML + canvas |
-| `black-hole-shadow-sim/v2/` | Merged v2 sources (canvas at this level + `v2.1/`) |
-| `black-hole-shadow-sim/v2/v2.1/` | Latest v2 HTML (`v2index.html`) and canvas |
+| `index.html` | Live GitHub Pages Kerr viewer |
+| `black-hole-shadow-sim/` | Kerr shadow / photon-sphere sources (`v1`, `v2`) |
+| `timelike-orbits/` | Newtonian vs GR timelike-orbit sim (HTML + Cursor canvas) |
 
-All former root `v2/` files now live under `black-hole-shadow-sim/v2/`.
+### Timelike orbits
+
+Compare equatorial massive-particle orbits under Newtonian gravity and Schwarzschild GR.
+
+- **Browser:** [`timelike-orbits/index.html`](timelike-orbits/index.html) → `http://localhost:8000/timelike-orbits/`
+- **Cursor canvas:** [`timelike-orbits/newtonian-gr-orbits.canvas.tsx`](timelike-orbits/newtonian-gr-orbits.canvas.tsx)
+- **Equations:** [`timelike-orbits/docs/newtonian-gr-orbits.md`](timelike-orbits/docs/newtonian-gr-orbits.md)
 
 ## Surfaces
 
