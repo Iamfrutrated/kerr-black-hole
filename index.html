@@ -3,788 +3,119 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Kerr black hole</title>
+  <title>Kerr black hole simulations</title>
   <style>
     :root {
       --bg: #181818;
-      --chrome: #141414;
       --text: #F0F0F0;
       --text-2: #F0F0F0BD;
       --text-3: #F0F0F099;
-      --fill-2: #F0F0F024;
-      --fill-3: #F0F0F014;
-      --fill-4: #F0F0F00F;
-      --stroke-1: #F0F0F033;
-      --stroke-2: #F0F0F01F;
-      --stroke-3: #F0F0F014;
+      --stroke: #F0F0F01F;
+      --fill: #F0F0F00F;
       --accent: #599CE7;
-      --cyan: #81A1C1;
-      --orange: #DD7F76;
-      --purple: #9386F2;
-      --red: #FC6B83;
-      --green: #3FA266;
-      --blue: #7BAFE9;
-      --chart-info: #70B0D8;
-      --chart-warning: #F0A040;
-      --chart-danger: #C04848;
-      --chart-neutral: #8888A8;
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; }
     body {
-      font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
       background: var(--bg);
       color: var(--text);
+      min-height: 100vh;
     }
-    main { max-width: 1100px; margin: 0 auto; padding: 24px 24px 48px; display: flex; flex-direction: column; gap: 20px; }
-    h1 { font-size: 24px; font-weight: 600; margin: 0; line-height: 1.25; }
-    h2 { font-size: 16px; font-weight: 600; margin: 0; }
-    h3 { font-size: 14px; font-weight: 600; margin: 0; }
-    p { margin: 0; }
-    .secondary { color: var(--text-2); }
-    .tertiary { color: var(--text-3); }
-    .small { font-size: 12px; }
-    .stack { display: flex; flex-direction: column; }
-    .row { display: flex; align-items: center; }
-    .wrap { flex-wrap: wrap; }
-
-    .stats { gap: 12px; }
-    .stat { min-width: 150px; }
-    .stat b { display: block; font-size: 20px; font-weight: 600; line-height: 1.2; }
-    .stat span { display: block; font-size: 12px; color: var(--text-3); margin-top: 2px; }
-
-    .viewport {
-      position: relative;
-      height: 520px;
-      min-height: 520px;
-      border: 1px solid var(--stroke-3);
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 48px 24px 64px;
+    }
+    h1 {
+      font-size: 28px;
+      font-weight: 600;
+      margin: 0 0 8px;
+      line-height: 1.25;
+    }
+    .lede {
+      color: var(--text-2);
+      margin: 0 0 32px;
+      max-width: 52ch;
+    }
+    .projects {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    a.project {
+      display: block;
+      padding: 18px 20px;
+      border: 1px solid var(--stroke);
       border-radius: 8px;
-      overflow: hidden;
-      background: var(--bg);
-      cursor: grab;
-      touch-action: none;
-      overscroll-behavior: contain;
-      user-select: none;
+      background: var(--fill);
+      color: inherit;
+      text-decoration: none;
+      transition: border-color 0.15s ease, background 0.15s ease;
     }
-    .viewport.dragging { cursor: grabbing; }
-    canvas#scene { display: block; position: absolute; top: 0; left: 0; }
-    .hint { position: absolute; left: 12px; bottom: 12px; color: var(--text-3); font-size: 12px; pointer-events: none; }
-
-    .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
-    @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
-
-    input[type="range"] { flex: 1; accent-color: var(--accent); margin: 0; }
-    .chi-value { width: 56px; text-align: right; font-weight: 600; }
-
-    .pill {
-      display: inline-flex; align-items: center; justify-content: center;
-      border-radius: 999px; white-space: nowrap; user-select: none;
-      font: inherit; font-size: 12px; line-height: 14px; font-weight: 400;
-      padding: 6px 10px; cursor: pointer;
-      color: var(--text-2); background: transparent; border: 1px solid var(--stroke-2);
-      transition: color 120ms ease, background 120ms ease;
+    a.project:hover,
+    a.project:focus-visible {
+      border-color: var(--accent);
+      background: #599CE714;
+      outline: none;
     }
-    .pill.active { color: var(--text); background: var(--fill-2); border-color: transparent; font-weight: 500; }
-
-    .toggle {
-      position: relative; width: 32px; height: 18px; border-radius: 999px; border: none; padding: 0;
-      background: var(--fill-2); cursor: pointer; transition: background 120ms ease;
+    a.project h2 {
+      font-size: 17px;
+      font-weight: 600;
+      margin: 0 0 6px;
+      color: var(--accent);
     }
-    .toggle::after {
-      content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
-      background: var(--text); transition: transform 120ms ease;
+    a.project p {
+      margin: 0;
+      color: var(--text-2);
+      font-size: 14px;
     }
-    .toggle[aria-checked="true"] { background: var(--accent); }
-    .toggle[aria-checked="true"]::after { transform: translateX(14px); }
-
-    label.check { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-    label.check input { accent-color: var(--accent); margin: 0; width: 14px; height: 14px; }
-    .swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
-
-    .callout {
-      display: flex; align-items: flex-start; gap: 10px; width: 100%;
+    .status {
+      display: inline-block;
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--text-3);
     }
-    .callout .icon { color: var(--chart-info); flex-shrink: 0; width: 12px; height: 19.5px; display: inline-flex; align-items: center; justify-content: center; }
-    .callout .title { font-weight: 500; }
-    .callout .body { color: var(--text); }
-
-    .chart { width: 100%; height: 260px; display: block; }
-    .chart text { fill: var(--text-3); font-size: 11px; font-family: inherit; }
-    .chart .grid-line { stroke: var(--stroke-2); }
-    .chart .axis { stroke: var(--stroke-1); }
-    .legend { gap: 14px; row-gap: 6px; font-size: 12px; color: var(--text-2); }
-    .legend i { display: inline-block; width: 12px; height: 2px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
-
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { padding: 8px 10px; border-bottom: 1px solid var(--stroke-2); text-align: left; }
-    th { color: var(--text-3); font-weight: 500; font-size: 12px; }
-    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-    tr:last-child td { border-bottom: none; }
-
-    .card { border: 1px solid var(--stroke-2); border-radius: 8px; overflow: hidden; }
-    .card-header { padding: 10px 14px; border-bottom: 1px solid var(--stroke-2); font-weight: 500; background: var(--fill-4); }
-    .card-body { padding: 14px; }
-    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; background: var(--fill-3); padding: 2px 6px; border-radius: 4px; }
-    hr { border: none; border-top: 1px solid var(--stroke-2); margin: 4px 0; }
+    footer {
+      margin-top: 40px;
+      font-size: 13px;
+      color: var(--text-3);
+    }
+    footer a { color: var(--text-2); }
   </style>
 </head>
 <body>
   <main>
-    <div class="stack" style="gap:6px">
-      <h1>Kerr black hole</h1>
-      <p class="secondary">
-        Three-dimensional nested spheres for M = 1, with spin χ = a/M. The event horizon is a
-        sphere of radius rh; photon spheres are constant-r Kerr surfaces. Drag the model to
-        rotate. The triad in the top-right shows X, Y, and spin axis Z.
-      </p>
-    </div>
-
-    <div class="row wrap stats">
-      <div class="stat"><b id="vRh">—</b><span>Event horizon rh</span></div>
-      <div class="stat"><b id="vPro" style="color:var(--chart-info)">—</b><span>Prograde photon sphere rPro</span></div>
-      <div class="stat"><b id="vRetro" style="color:var(--chart-warning)">—</b><span>Retrograde photon sphere rRetro</span></div>
-      <div class="stat"><b id="vShadow">—</b><span>Shadow radius (observer sky)</span></div>
-    </div>
-
-    <div class="viewport" id="viewport">
-      <canvas id="scene"></canvas>
-      <div class="hint">Drag to orbit · scroll to zoom · units of M</div>
-    </div>
-
-    <div class="grid">
-      <div class="stack" style="gap:12px">
-        <h2>Spin χ = a/M</h2>
-        <div class="row" style="gap:10px">
-          <input id="chi" type="range" min="0" max="0.998" step="0.002" value="0.8" aria-label="Dimensionless spin" />
-          <span class="chi-value" id="chiOut">0.800</span>
-        </div>
-        <div class="row wrap" style="gap:8px">
-          <button class="pill" data-chi="0">Schwarzschild 0</button>
-          <button class="pill" data-chi="0.5">Moderate 0.5</button>
-          <button class="pill active" data-chi="0.8">High 0.8</button>
-          <button class="pill" data-chi="0.94">Near-extremal 0.94</button>
-          <button class="pill" data-chi="0.998">Extremal 0.998</button>
-        </div>
-        <div class="row wrap" style="gap:10px">
-          <span class="small">Auto-rotate</span>
-          <button class="toggle" id="autoRotate" role="switch" aria-checked="true" aria-label="Auto-rotate"></button>
-          <span class="small">Invert vertical drag</span>
-          <button class="toggle" id="invertDrag" role="switch" aria-checked="false" aria-label="Invert vertical drag"></button>
-          <span class="small tertiary">Shadow table uses an equatorial observer (θ = 90°)</span>
-        </div>
-      </div>
-
-      <div class="stack" style="gap:10px">
-        <h2>Surfaces</h2>
-        <label class="check"><input type="checkbox" id="lHorizon" checked /> Event horizon rh</label>
-        <label class="check"><input type="checkbox" id="lPro" checked /> Prograde photon sphere rPro</label>
-        <label class="check"><input type="checkbox" id="lRetro" checked /> Retrograde photon sphere rRetro</label>
-        <label class="check"><input type="checkbox" id="lShadow" checked /> Black hole shadow (critical curve)</label>
-        <label class="check"><input type="checkbox" id="lPhotons" checked /> Orbiting photons</label>
-        <label class="check"><input type="checkbox" id="lAxis" checked /> Spin axis in scene</label>
-        <div class="row wrap" style="gap:8px">
-          <span class="swatch" style="background:var(--text-3)"></span><span class="small">rh</span>
-          <span class="swatch" style="background:var(--cyan)"></span><span class="small">rPro</span>
-          <span class="swatch" style="background:var(--orange)"></span><span class="small">rRetro</span>
-          <span class="swatch" style="background:var(--purple)"></span><span class="small">shadow</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="callout">
-      <span class="icon" aria-hidden="true">
-        <svg width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="5.25" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M6 5.3v3.2M6 3.4v.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-      </span>
-      <div class="stack" style="gap:4px">
-        <div class="title">rh is the event horizon, not a photon sphere</div>
-        <div class="body">
-          The notebook defines rh as the outer Kerr horizon. Unstable circular photon orbits sit at
-          rPro (co-rotating) and rRetro (counter-rotating). The shadow is the capture cross-section on
-          the distant observer’s sky — larger than either photon sphere, and D-shaped when viewed near
-          the equator of a spinning hole. It is drawn on the sky plane, so it follows your viewing
-          inclination but not the hole’s rotation.
-        </div>
-      </div>
-    </div>
-
-    <h2>Radii versus spin</h2>
-    <p class="small secondary">
-      Geometric radii in units of M. Photon-sphere curves from the notebook; shadow radius is the
-      maximum impact parameter of the critical curve for an equatorial observer. Source: Kerr
-      geodesic formulae (Bardeen 1973; Teo 2003).
+    <h1>Kerr black hole simulations</h1>
+    <p class="lede">
+      Interactive visualizations of spinning black holes: analytic Kerr shadows today,
+      and a planned comparison of Newtonian versus general-relativistic timelike orbits.
     </p>
-    <svg class="chart" id="chart" role="img" aria-label="Radii versus spin"></svg>
-    <div class="row wrap legend">
-      <span><i style="background:var(--chart-neutral)"></i>Event horizon rh</span>
-      <span><i style="background:var(--chart-info)"></i>Prograde photon sphere rPro</span>
-      <span><i style="background:var(--chart-warning)"></i>Retrograde photon sphere rRetro</span>
-      <span><i style="background:var(--chart-danger)"></i>Shadow radius (equatorial)</span>
-    </div>
-    <p class="small tertiary">Horizontal axis: dimensionless spin χ = a/M. Vertical axis: radius (M).</p>
 
-    <h2>Current values</h2>
-    <table>
-      <thead><tr><th>Surface</th><th>Formula</th><th class="num">r / M</th></tr></thead>
-      <tbody>
-        <tr><td>Event horizon rh</td><td>M (1 + √(1 − χ²))</td><td class="num" id="tRh"></td></tr>
-        <tr><td>Prograde photon sphere rPro</td><td>2M (1 + cos(⅔ arccos(−χ)))</td><td class="num" id="tPro"></td></tr>
-        <tr><td>Retrograde photon sphere rRetro</td><td>2M (1 + cos(⅔ arccos(χ)))</td><td class="num" id="tRetro"></td></tr>
-        <tr><td>Shadow, left edge α</td><td>critical curve (Teo ξ, η)</td><td class="num" id="tLeft"></td></tr>
-        <tr><td>Shadow, right edge α</td><td>critical curve (Teo ξ, η)</td><td class="num" id="tRight"></td></tr>
-        <tr><td>Shadow diameter</td><td>α_right − α_left</td><td class="num" id="tDiam"></td></tr>
-      </tbody>
-    </table>
-
-    <h3>Equations (M = 1)</h3>
-    <div class="card">
-      <div class="card-header">Notebook definitions</div>
-      <div class="card-body stack" style="gap:8px">
-        <p><code>rh(χ) = M (1 + √(1 − χ²))</code></p>
-        <p><code>rPro(χ) = 2M (1 + Cos[⅔ ArcCos[−χ]])</code></p>
-        <p><code>rRetro(χ) = 2M (1 + Cos[⅔ ArcCos[χ]])</code></p>
-        <hr />
-        <p class="small secondary">
-          χ = 0 is Schwarzschild: rh = 2M, rPro = rRetro = 3M, shadow radius = 3√3 M ≈ 5.196 M.
-          χ → 1 is extremal Kerr: rh = rPro = M, rRetro = 4M. Prograde photons hug the horizon;
-          retrograde photons recede.
+    <div class="projects">
+      <a class="project" href="analytic-kerr-shadow/">
+        <h2>Analytic Kerr shadow</h2>
+        <p>
+          3D Kerr geometry with event horizon, photon spheres, and the black-hole shadow
+          from Bardeen (1973) and Teo (2003) geodesic radii.
         </p>
-      </div>
+        <span class="status">Live · open the interactive viewer</span>
+      </a>
+
+      <a class="project" href="timelike-orbits/">
+        <h2>Timelike orbits</h2>
+        <p>
+          Side-by-side Newtonian and GR orbits for massive particles around black holes —
+          scaffolding for a future simulation.
+        </p>
+        <span class="status">Starter · project README and layout</span>
+      </a>
     </div>
+
+    <footer>
+      Source:
+      <a href="https://github.com/Iamfrutrated/kerr-black-hole">github.com/Iamfrutrated/kerr-black-hole</a>
+    </footer>
   </main>
-
-  <script>
-    const M = 1;
-    const CHI_MAX = 0.998;
-    const REF_DIST = 22;
-    const FIT_RADIUS = 10.2;
-    const theme = {
-      text: "#F0F0F0",
-      textSecondary: "#F0F0F0BD",
-      textTertiary: "#F0F0F099",
-      chrome: "#141414",
-      fillTertiary: "#F0F0F014",
-      strokeTertiary: "#F0F0F014",
-      cyan: "#81A1C1",
-      orange: "#DD7F76",
-      purple: "#9386F2",
-      red: "#FC6B83",
-      green: "#3FA266",
-      blue: "#7BAFE9",
-    };
-
-    const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
-    const rh = (c) => M * (1 + Math.sqrt(Math.max(0, 1 - c * c)));
-    const rPro = (c) => 2 * M * (1 + Math.cos((2 / 3) * Math.acos(-c)));
-    const rRetro = (c) => 2 * M * (1 + Math.cos((2 / 3) * Math.acos(c)));
-
-    function sphereCart(r, theta, phi) {
-      const s = Math.sin(theta);
-      return { x: r * s * Math.cos(phi), y: r * s * Math.sin(phi), z: r * Math.cos(theta) };
-    }
-    function kerrCart(r, theta, phi, a) {
-      const rho = Math.sqrt(r * r + a * a);
-      const s = Math.sin(theta);
-      return { x: rho * s * Math.cos(phi), y: rho * s * Math.sin(phi), z: r * Math.cos(theta) };
-    }
-    function teoXi(r, a) {
-      return -(r ** 3 - 3 * M * r ** 2 + a * a * r + a * a * M) / (a * (r - M));
-    }
-    function teoEta(r, a) {
-      return (r ** 3 * (4 * a * a * M - r * (r - 3 * M) ** 2)) / (a * a * (r - M) ** 2);
-    }
-
-    // Critical curve on the observer's sky. The r-range of valid spherical
-    // photon orbits is found by root-finding and sampled with cosine spacing so
-    // both ends of the D close at β = 0 instead of ending in a straight chord.
-    function shadowSilhouette(chi, thetaObs) {
-      const th = clamp(thetaObs, 0.05, Math.PI - 0.05);
-      const n = 128;
-      const circle = (R) => {
-        const pts = [];
-        for (let i = 0; i <= n; i++) {
-          const ang = (i / n) * Math.PI * 2;
-          pts.push({ a: R * Math.cos(ang), b: R * Math.sin(ang) });
-        }
-        return pts;
-      };
-      if (chi < 1e-3) return circle(3 * Math.sqrt(3) * M);
-      const spin = chi * M;
-      const sinT = Math.sin(th), cosT = Math.cos(th);
-      const cot2 = (cosT * cosT) / (sinT * sinT);
-      const disc = (r) => {
-        const xi = teoXi(r, spin);
-        return teoEta(r, spin) + spin * spin * cosT * cosT - xi * xi * cot2;
-      };
-      const rLo = rPro(chi), rHi = rRetro(chi);
-      const N = 256;
-      const grid = (i) => rLo + ((rHi - rLo) * i) / N;
-      let iFirst = -1, iLast = -1;
-      for (let i = 0; i <= N; i++) {
-        if (disc(grid(i)) >= 0) {
-          if (iFirst < 0) iFirst = i;
-          iLast = i;
-        }
-      }
-      if (iFirst < 0) return circle(3 * Math.sqrt(3) * M);
-      let rMin = grid(iFirst);
-      if (iFirst > 0) {
-        let lo = grid(iFirst - 1), hi = rMin;
-        for (let k = 0; k < 40; k++) {
-          const mid = 0.5 * (lo + hi);
-          if (disc(mid) >= 0) hi = mid; else lo = mid;
-        }
-        rMin = hi;
-      }
-      let rMax = grid(iLast);
-      if (iLast < N) {
-        let lo = rMax, hi = grid(iLast + 1);
-        for (let k = 0; k < 40; k++) {
-          const mid = 0.5 * (lo + hi);
-          if (disc(mid) >= 0) lo = mid; else hi = mid;
-        }
-        rMax = lo;
-      }
-      const upper = [], lower = [];
-      for (let i = 0; i <= n; i++) {
-        const t = 0.5 * (1 - Math.cos((Math.PI * i) / n));
-        const r = rMin + (rMax - rMin) * t;
-        const alpha = -teoXi(r, spin) / sinT;
-        const beta = Math.sqrt(Math.max(0, disc(r)));
-        upper.push({ a: alpha, b: beta });
-        lower.push({ a: alpha, b: -beta });
-      }
-      lower.reverse();
-      return upper.concat(lower);
-    }
-    let silKey = "", silPts = [];
-    function silhouetteCached(chi, thetaObs) {
-      const key = chi.toFixed(4) + "|" + thetaObs.toFixed(3);
-      if (key !== silKey) {
-        silKey = key;
-        silPts = shadowSilhouette(chi, thetaObs);
-      }
-      return silPts;
-    }
-    function shadowWidth(chi, thetaObs) {
-      let minA = Infinity, maxA = -Infinity, maxR = 0;
-      for (const p of shadowSilhouette(chi, thetaObs)) {
-        minA = Math.min(minA, p.a);
-        maxA = Math.max(maxA, p.a);
-        maxR = Math.max(maxR, Math.hypot(p.a, p.b));
-      }
-      return { left: minA, right: maxA, radius: maxR, diameter: maxA - minA };
-    }
-
-    // Geometry is built once per spin value; only the camera changes per frame.
-    function wireLines(r, point, layer, ringWidth, ringAlpha) {
-      const lines = [];
-      const meridians = 10, parallels = 8;
-      for (let m = 0; m < meridians; m++) {
-        const phi = (m / meridians) * Math.PI * 2;
-        const pts = [];
-        for (let i = 0; i <= 32; i++) pts.push(point(r, (i / 32) * Math.PI, phi));
-        lines.push({ layer, pts, width: 1, alpha: 0.55 });
-      }
-      for (let p = 1; p < parallels; p++) {
-        if (p * 2 === parallels) continue;
-        const theta = (p / parallels) * Math.PI;
-        const pts = [];
-        for (let i = 0; i <= 48; i++) pts.push(point(r, theta, (i / 48) * Math.PI * 2));
-        lines.push({ layer, pts, width: 1, alpha: 0.4 });
-      }
-      const ring = [];
-      for (let i = 0; i <= 96; i++) ring.push(point(r, Math.PI / 2, (i / 96) * Math.PI * 2));
-      lines.push({ layer, pts: ring, width: ringWidth, alpha: ringAlpha });
-      return lines;
-    }
-    function buildGeometry(chi) {
-      const a = chi * M;
-      const rH = rh(chi), rP = rPro(chi), rR = rRetro(chi);
-      const kerrPoint = (r, th, ph) => kerrCart(r, th, ph, a);
-      const axis = [];
-      for (let i = 0; i <= 8; i++) axis.push({ x: 0, y: 0, z: -7.2 + (14.4 * i) / 8 });
-      const lines = [
-        ...wireLines(rR, kerrPoint, "retrograde", 2.4, 1),
-        ...wireLines(rP, kerrPoint, "prograde", 2.4, 1),
-        ...wireLines(rH, sphereCart, "horizon", 1.4, 0.7),
-        { layer: "axis", pts: axis, width: 1, alpha: 0.7 },
-      ];
-      return { a, rH, rP, rR, lines };
-    }
-
-    function toCamera(p, cam) {
-      const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
-      const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
-      const x1 = p.x * cy - p.y * sy;
-      const y1 = p.x * sy + p.y * cy;
-      return { x: x1, y: y1 * cp - p.z * sp, z: y1 * sp + p.z * cp };
-    }
-    function screenScale(zoom, w, h) {
-      return ((Math.min(w, h) * 0.44) / FIT_RADIUS) * zoom;
-    }
-    function makeTransform(cam, w, h) {
-      const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
-      const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
-      const k = screenScale(cam.zoom, w, h);
-      const cx = w / 2, cz = h / 2;
-      return (p) => {
-        const x1 = p.x * cy - p.y * sy;
-        const y1 = p.x * sy + p.y * cy;
-        const d = y1 * cp - p.z * sp;
-        const z = y1 * sp + p.z * cp;
-        const persp = 1 / Math.max(0.72, 1 - 0.12 * (d / REF_DIST));
-        return { x: cx + x1 * k * persp, y: cz - z * k * persp, d };
-      };
-    }
-    function addSegments(ctx, pts, front) {
-      let open = false, any = false;
-      for (let i = 1; i < pts.length; i++) {
-        const p = pts[i - 1], q = pts[i];
-        if ((p.d + q.d >= 0) === front) {
-          if (!open) { ctx.moveTo(p.x, p.y); open = true; }
-          ctx.lineTo(q.x, q.y);
-          any = true;
-        } else {
-          open = false;
-        }
-      }
-      return any;
-    }
-
-    const state = {
-      chi: 0.8,
-      cam: { yaw: 0.55, pitch: 0.38, zoom: 1 },
-      drag: null,
-      phase: 0,
-      dirty: true,
-      geom: null,
-      autoRotate: true,
-      invertDrag: false,
-      w: 0,
-      h: 0,
-      layers: { horizon: true, prograde: true, retrograde: true, shadow: true, axis: true, photons: true },
-    };
-
-    const viewport = document.getElementById("viewport");
-    const canvas = document.getElementById("scene");
-    const ctx = canvas.getContext("2d");
-
-    function resize() {
-      const rect = viewport.getBoundingClientRect();
-      state.w = Math.max(320, rect.width);
-      state.h = Math.max(360, rect.height);
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
-      canvas.width = Math.round(state.w * dpr);
-      canvas.height = Math.round(state.h * dpr);
-      canvas.style.width = state.w + "px";
-      canvas.style.height = state.h + "px";
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      state.dirty = true;
-    }
-    if (typeof ResizeObserver === "function") new ResizeObserver(resize).observe(viewport);
-    window.addEventListener("resize", resize);
-    resize();
-
-    // Render loop starts immediately; geometry is attached by setChi below.
-    let last = performance.now();
-    function frame(now) {
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
-      const rotating = state.autoRotate && !state.drag;
-      const animating = rotating || state.layers.photons;
-      if (rotating) state.cam.yaw += dt * 0.22;
-      if (state.layers.photons) state.phase += dt;
-      if (state.geom && (animating || state.dirty)) {
-        state.dirty = false;
-        ctx.clearRect(0, 0, state.w, state.h);
-        drawScene(state.w, state.h);
-        drawGizmo(state.w, state.cam);
-      }
-      requestAnimationFrame(frame);
-    }
-    requestAnimationFrame(frame);
-    state.geom = buildGeometry(state.chi);
-
-    viewport.addEventListener("pointerdown", (e) => {
-      viewport.setPointerCapture(e.pointerId);
-      viewport.classList.add("dragging");
-      state.drag = { x: e.clientX, y: e.clientY, yaw: state.cam.yaw, pitch: state.cam.pitch };
-    });
-    viewport.addEventListener("pointermove", (e) => {
-      if (!state.drag) return;
-      state.cam.yaw = state.drag.yaw + (e.clientX - state.drag.x) * 0.008;
-      const dy = (e.clientY - state.drag.y) * (state.invertDrag ? -1 : 1);
-      state.cam.pitch = clamp(state.drag.pitch + dy * 0.008, -1.15, 1.15);
-      state.dirty = true;
-    });
-    const endDrag = () => {
-      state.drag = null;
-      viewport.classList.remove("dragging");
-    };
-    viewport.addEventListener("pointerup", endDrag);
-    viewport.addEventListener("pointercancel", endDrag);
-    viewport.addEventListener("wheel", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      let dy = e.deltaY;
-      if (e.deltaMode === 1) dy *= 16;
-      if (e.deltaMode === 2) dy *= 40;
-      state.cam.zoom = clamp(state.cam.zoom * Math.exp(-dy * 0.0018), 0.35, 3.5);
-      state.dirty = true;
-    }, { passive: false });
-
-    const fmt = (x) => x.toFixed(3) + " M";
-    const chiInput = document.getElementById("chi");
-    const chiOut = document.getElementById("chiOut");
-    const pills = Array.from(document.querySelectorAll(".pill"));
-    function pillActive(target, chi) {
-      if (target === 0) return chi < 0.02;
-      if (target === 0.5) return Math.abs(chi - 0.5) < 0.02;
-      if (target === 0.8) return Math.abs(chi - 0.8) < 0.02;
-      if (target === 0.94) return chi > 0.93 && chi < 0.96;
-      return chi >= 0.99;
-    }
-    function setChi(v) {
-      const chi = clamp(Number(v), 0, CHI_MAX);
-      state.chi = chi;
-      state.geom = buildGeometry(chi);
-      state.dirty = true;
-      chiInput.value = String(chi);
-      chiOut.textContent = chi.toFixed(3);
-      pills.forEach((b) => b.classList.toggle("active", pillActive(Number(b.dataset.chi), chi)));
-      const rH = rh(chi), rP = rPro(chi), rR = rRetro(chi);
-      const dims = shadowWidth(chi, Math.PI / 2);
-      document.getElementById("vRh").textContent = fmt(rH);
-      document.getElementById("vPro").textContent = fmt(rP);
-      document.getElementById("vRetro").textContent = fmt(rR);
-      document.getElementById("vShadow").textContent = fmt(dims.radius);
-      document.getElementById("tRh").textContent = rH.toFixed(4);
-      document.getElementById("tPro").textContent = rP.toFixed(4);
-      document.getElementById("tRetro").textContent = rR.toFixed(4);
-      document.getElementById("tLeft").textContent = dims.left.toFixed(4);
-      document.getElementById("tRight").textContent = dims.right.toFixed(4);
-      document.getElementById("tDiam").textContent = dims.diameter.toFixed(4);
-    }
-    chiInput.addEventListener("input", (e) => setChi(e.target.value));
-    pills.forEach((b) => b.addEventListener("click", () => setChi(b.dataset.chi)));
-
-    const toggle = document.getElementById("autoRotate");
-    toggle.addEventListener("click", () => {
-      state.autoRotate = !state.autoRotate;
-      toggle.setAttribute("aria-checked", String(state.autoRotate));
-      state.dirty = true;
-    });
-    const invertToggle = document.getElementById("invertDrag");
-    invertToggle.addEventListener("click", () => {
-      state.invertDrag = !state.invertDrag;
-      invertToggle.setAttribute("aria-checked", String(state.invertDrag));
-    });
-    const bind = (id, key) => {
-      document.getElementById(id).addEventListener("change", (e) => {
-        state.layers[key] = e.target.checked;
-        state.dirty = true;
-      });
-    };
-    bind("lHorizon", "horizon");
-    bind("lPro", "prograde");
-    bind("lRetro", "retrograde");
-    bind("lShadow", "shadow");
-    bind("lPhotons", "photons");
-    bind("lAxis", "axis");
-    setChi(0.8);
-
-    function lineColor(layer) {
-      if (layer === "retrograde") return theme.orange;
-      if (layer === "prograde") return theme.cyan;
-      if (layer === "horizon") return theme.textSecondary;
-      return theme.textTertiary;
-    }
-
-    function drawScene(w, h) {
-      const cam = state.cam;
-      const layers = state.layers;
-      const geom = state.geom;
-      const tf = makeTransform(cam, w, h);
-      const k = screenScale(cam.zoom, w, h);
-
-      // Shadow: the critical curve lives on the observer's sky plane, so it is
-      // drawn directly in screen space (β along the projected spin axis).
-      if (layers.shadow) {
-        const sil = silhouetteCached(state.chi, Math.PI / 2 - cam.pitch);
-        ctx.beginPath();
-        for (let i = 0; i < sil.length; i++) {
-          const x = w / 2 + sil[i].a * k, y = h / 2 - sil[i].b * k;
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        ctx.closePath();
-        ctx.globalAlpha = 0.12;
-        ctx.fillStyle = theme.purple;
-        ctx.fill();
-        ctx.globalAlpha = 0.95;
-        ctx.strokeStyle = theme.purple;
-        ctx.lineWidth = 2.2;
-        ctx.lineJoin = "round";
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-      }
-
-      const projected = [];
-      for (const line of geom.lines) {
-        if (!layers[line.layer]) continue;
-        projected.push({ line, pts: line.pts.map(tf) });
-      }
-      const pass = (front) => {
-        ctx.lineJoin = "round";
-        ctx.lineCap = "round";
-        for (const { line, pts } of projected) {
-          // The back hemisphere of the horizon is hidden by the opaque disk.
-          if (line.layer === "horizon" && !front) continue;
-          ctx.beginPath();
-          if (!addSegments(ctx, pts, front)) continue;
-          ctx.globalAlpha = line.alpha;
-          ctx.strokeStyle = lineColor(line.layer);
-          ctx.lineWidth = line.width;
-          ctx.stroke();
-        }
-        ctx.globalAlpha = 1;
-      };
-
-      const dots = [];
-      if (layers.photons) {
-        const { a, rP, rR } = geom;
-        if (layers.prograde) dots.push({ p: tf(kerrCart(rP, Math.PI / 2, (state.phase * 2.8) / (rP ** 1.5 + a), a)), color: theme.cyan });
-        if (layers.retrograde) dots.push({ p: tf(kerrCart(rR, Math.PI / 2, (-state.phase * 2.8) / (rR ** 1.5 - a), a)), color: theme.orange });
-      }
-      const drawDots = (front) => {
-        for (const { p, color } of dots) {
-          if ((p.d >= 0) !== front) continue;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2);
-          ctx.fillStyle = color;
-          ctx.fill();
-        }
-      };
-
-      pass(false);
-      drawDots(false);
-      if (layers.horizon) {
-        ctx.beginPath();
-        ctx.arc(w / 2, h / 2, geom.rH * k, 0, Math.PI * 2);
-        ctx.fillStyle = theme.chrome;
-        ctx.fill();
-        ctx.globalAlpha = 0.5;
-        ctx.strokeStyle = theme.textSecondary;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-      }
-      pass(true);
-      drawDots(true);
-
-      if (layers.axis) {
-        const tip = tf({ x: 0, y: 0, z: 7.2 });
-        ctx.fillStyle = theme.textTertiary;
-        ctx.font = "11px ui-sans-serif, system-ui, sans-serif";
-        ctx.textAlign = "left";
-        ctx.textBaseline = "alphabetic";
-        ctx.fillText("spin", tip.x + 6, tip.y - 4);
-      }
-    }
-
-    function drawGizmo(w, cam) {
-      const cx = w - 58, cy = 58, radius = 28;
-      ctx.beginPath();
-      ctx.arc(cx, cy, 46, 0, Math.PI * 2);
-      ctx.fillStyle = theme.fillTertiary;
-      ctx.fill();
-      ctx.strokeStyle = theme.strokeTertiary;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      const axes = [
-        { label: "X", vec: { x: 1, y: 0, z: 0 }, color: theme.red },
-        { label: "Y", vec: { x: 0, y: 1, z: 0 }, color: theme.green },
-        { label: "Z", vec: { x: 0, y: 0, z: 1 }, color: theme.blue },
-      ].map((ax) => {
-        const c = toCamera(ax.vec, cam);
-        return { ...ax, x: c.x * radius, y: -c.z * radius, depth: c.y };
-      }).sort((u, v) => u.depth - v.depth);
-      ctx.font = "600 11px ui-sans-serif, system-ui, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      for (const ax of axes) {
-        const tx = cx + ax.x, ty = cy + ax.y;
-        const len = Math.hypot(ax.x, ax.y) || 1;
-        const nx = ax.x / len, ny = ax.y / len;
-        ctx.strokeStyle = ax.color;
-        ctx.globalAlpha = 0.35;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(cx - ax.x * 0.35, cy - ax.y * 0.35);
-        ctx.lineTo(cx, cy);
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(tx - nx * 7, ty - ny * 7);
-        ctx.stroke();
-        ctx.fillStyle = ax.color;
-        ctx.beginPath();
-        ctx.moveTo(tx, ty);
-        ctx.lineTo(tx - nx * 7 - ny * 3.2, ty - ny * 7 + nx * 3.2);
-        ctx.lineTo(tx - nx * 7 + ny * 3.2, ty - ny * 7 - nx * 3.2);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillText(ax.label, tx + nx * 10, ty + ny * 10);
-      }
-      ctx.fillStyle = theme.textTertiary;
-      ctx.font = "9px ui-sans-serif, system-ui, sans-serif";
-      ctx.fillText("Z = spin", cx, cy + 42);
-    }
-
-    // Radii versus spin chart (static; mirrors the canvas LineChart).
-    const chartSvg = document.getElementById("chart");
-    function drawChart() {
-      const svg = chartSvg;
-      const W = Math.max(320, svg.getBoundingClientRect().width), H = 260, padL = 52, padR = 16, padT = 12, padB = 32;
-      svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-      const x0 = padL, x1 = W - padR, y0 = padT, y1 = H - padB;
-      const yMin = 0, yMax = 8;
-      const series = [
-        { color: "var(--chart-neutral)", f: (c) => rh(c) },
-        { color: "var(--chart-info)", f: (c) => rPro(c) },
-        { color: "var(--chart-warning)", f: (c) => rRetro(c) },
-        { color: "var(--chart-danger)", f: (c) => shadowWidth(c, Math.PI / 2).radius },
-      ];
-      const n = 20;
-      const xs = (i) => x0 + ((x1 - x0) * i) / n;
-      const ys = (v) => y1 - ((y1 - y0) * (v - yMin)) / (yMax - yMin);
-      let out = "";
-      for (let v = 0; v <= yMax; v += 2) {
-        out += `<line class="grid-line" x1="${x0}" x2="${x1}" y1="${ys(v)}" y2="${ys(v)}" vector-effect="non-scaling-stroke"/>`;
-        out += `<text x="${x0 - 8}" y="${ys(v) + 4}" text-anchor="end">${v} M</text>`;
-      }
-      out += `<line class="axis" x1="${x0}" x2="${x1}" y1="${y1}" y2="${y1}" vector-effect="non-scaling-stroke"/>`;
-      for (let i = 0; i <= n; i += 5) {
-        out += `<text x="${xs(i)}" y="${H - 10}" text-anchor="middle">${(i / n).toFixed(2)}</text>`;
-      }
-      for (const s of series) {
-        let d = "";
-        for (let i = 0; i <= n; i++) {
-          const c = Math.min(i / n, CHI_MAX);
-          d += (i === 0 ? "M" : "L") + xs(i).toFixed(1) + " " + ys(Number(s.f(c).toFixed(3))).toFixed(1) + " ";
-        }
-        out += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
-      }
-      svg.innerHTML = out;
-    }
-    try {
-      drawChart();
-      if (typeof ResizeObserver === "function") new ResizeObserver(drawChart).observe(chartSvg);
-      else window.addEventListener("resize", drawChart);
-    } catch (err) {
-      console.error("chart", err);
-    }
-  </script>
 </body>
 </html>
