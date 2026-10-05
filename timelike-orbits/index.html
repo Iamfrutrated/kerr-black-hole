@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Timelike orbits — Newtonian vs GR</title>
+  <style>
+    :root {
+      --bg: #181818;
+      --text: #F0F0F0;
+      --text-2: #F0F0F0BD;
+      --text-3: #F0F0F099;
+      --stroke: #F0F0F01F;
+      --accent: #599CE7;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    main { max-width: 640px; margin: 0 auto; padding: 48px 24px 64px; }
+    h1 { font-size: 24px; font-weight: 600; margin: 0 0 12px; }
+    p { color: var(--text-2); margin: 0 0 16px; }
+    .box {
+      border: 1px solid var(--stroke);
+      border-radius: 8px;
+      padding: 16px 18px;
+      color: var(--text-3);
+      font-size: 14px;
+    }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Timelike orbits</h1>
+    <p>
+      Planned interactive comparison of Newtonian and general-relativistic orbits for
+      massive particles around black holes.
+    </p>
+    <div class="box">
+      Scaffold only — see <a href="./README.md">README.md</a> for goals and folder layout.
+      Simulation code will live under <code>sim/</code>; notes under <code>docs/</code>.
+    </div>
+    <p style="margin-top:24px;font-size:14px">
+      <a href="../">← Back to repo landing</a>
+      ·
+      <a href="../analytic-kerr-shadow/">Analytic Kerr shadow</a>
+    </p>
+  </main>
+</body>
+</html>
