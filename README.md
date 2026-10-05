@@ -4,19 +4,7 @@ Interactive 3D model of a Kerr (spinning) black hole using the geodesic radii fr
 
 ## Run it
 
-**On GitHub Pages:** [https://iamfrutrated.github.io/kerr-black-hole/](https://iamfrutrated.github.io/kerr-black-hole/)
-
-A `.canvas.tsx` file only runs inside Cursor. GitHub does not execute it. The live site is `index.html` in this repo.
-
-**Locally:** open `index.html` in a browser, or from this folder run:
-
-```bash
-python3 -m http.server 8000
-```
-
-Then visit `http://localhost:8000`.
-
-**In Cursor:** open `black-hole-shadow-sim/v2/kerr-black-hole.canvas.tsx` (or the newer `v2/v2.1/` canvas) beside the chat.
+[https://iamfrutrated.github.io/kerr-black-hole/](https://iamfrutrated.github.io/kerr-black-hole/)
 
 ## Layout
 
