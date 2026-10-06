@@ -61,7 +61,23 @@
     .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
     @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
     input[type="range"] { flex: 1; accent-color: var(--accent); margin: 0; }
-    .val { width: 64px; text-align: right; font-weight: 600; }
+    .numbox {
+      width: 88px;
+      text-align: right;
+      font: inherit;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      color: var(--text);
+      background: var(--fill-3);
+      border: 1px solid var(--stroke-1);
+      border-radius: 6px;
+      padding: 4px 6px;
+    }
+    .numbox.wide { width: 108px; }
+    .numbox:focus { outline: none; border-color: var(--accent); }
+    .numbox::-webkit-outer-spin-button,
+    .numbox::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .numbox[type="number"] { -moz-appearance: textfield; appearance: textfield; }
     .lab { width: 28px; color: var(--text-2); }
     .pill {
       display: inline-flex; align-items: center; justify-content: center;
@@ -129,18 +145,27 @@
         <div class="row">
           <span class="lab">M</span>
           <input type="range" id="mRange" min="0.2" max="5" step="0.01" value="1" aria-label="Mass M" />
-          <span class="val" id="mVal">1.00</span>
+          <input class="numbox" type="number" id="mVal" min="0.01" max="50" step="0.01" value="1.00" aria-label="Mass M value" />
         </div>
         <div class="row">
           <span class="lab">L</span>
           <input type="range" id="lRange" min="0.5" max="20" step="0.01" value="4" aria-label="Specific angular momentum L" />
-          <span class="val" id="lVal">4.00</span>
+          <input class="numbox" type="number" id="lVal" min="0.1" max="100" step="0.01" value="4.00" aria-label="Specific angular momentum L value" />
         </div>
         <div class="row">
           <span class="lab">u₀</span>
-          <input type="range" id="uRange" min="0.01" max="0.5" step="0.0001" value="0.083334" aria-label="Initial reciprocal radius u0" />
-          <span class="val" id="uVal">0.0833</span>
+          <input type="range" id="uRange" min="0.01" max="0.5" step="0.000001" value="0.083334" aria-label="Initial reciprocal radius u0" />
+          <input class="numbox wide" type="number" id="uVal" min="0.000001" max="2" step="0.000001" value="0.083334" aria-label="Initial reciprocal radius u0 value" />
         </div>
+        <div class="row" style="margin:2px 0 4px">
+          <button type="button" class="pill" id="btnIn">Perturb inwards</button>
+          <button type="button" class="pill" id="btnOut">Perturb outwards</button>
+        </div>
+        <p class="small tertiary">
+          Typed values apply on Enter or when the box loses focus. Perturb changes u₀ by ±10⁻⁶
+          (inwards = smaller r). On the unstable circular orbit that is enough to plunge or fly out;
+          on the stable orbit the path stays bound.
+        </p>
 
         <h3 style="margin-top:8px">u₀ presets</h3>
         <div class="row" id="presets" style="margin:4px 0 8px; gap:8px">
@@ -149,8 +174,8 @@
           <button type="button" class="pill" id="btnIsco">ISCO 0.1667</button>
         </div>
         <p class="small tertiary">
-          Stable applies u₋ + 10⁻⁶ (notebook-style nudge). Unstable uses exact u₊. ISCO sets
-          L = 2√3 M and u₀ = 1/(6M), and shows the r = 6M ring.
+          Presets set the exact circular root. Use perturb afterwards to leave the circle.
+          ISCO sets L = 2√3 M and u₀ = 1/(6M), and shows the r = 6M ring.
         </p>
 
         <div class="row">
@@ -317,25 +342,31 @@
       syncUI();
     }
 
+    function setBox(id, value, digits) {
+      const el = document.getElementById(id);
+      if (document.activeElement === el) return;
+      el.value = value.toFixed(digits);
+    }
+
     function syncUI() {
       const roots = circularRoots(state.M, state.L);
       const Ui = uIsco(state.M);
       document.getElementById("mRange").value = state.M;
       document.getElementById("lRange").value = state.L;
       document.getElementById("uRange").value = state.u0;
-      document.getElementById("mVal").textContent = state.M.toFixed(2);
-      document.getElementById("lVal").textContent = state.L.toFixed(2);
-      document.getElementById("uVal").textContent = state.u0.toFixed(4);
+      setBox("mVal", state.M, 3);
+      setBox("lVal", state.L, 3);
+      setBox("uVal", state.u0, 7);
       document.getElementById("sM").textContent = fmt(state.M, 3);
       document.getElementById("sL").textContent = fmt(state.L, 3);
-      document.getElementById("sU0").textContent = fmt(state.u0, 5);
+      document.getElementById("sU0").textContent = fmt(state.u0, 7);
       document.getElementById("sR0").textContent = fmt(1 / state.u0, 3);
       document.getElementById("tRh").textContent = fmt(2 * state.M);
       document.getElementById("tIscoR").textContent = fmt(6 * state.M);
       document.getElementById("tIscoL").textContent = fmt(lIsco(state.M));
       document.getElementById("tUs").textContent = roots ? fmt(roots.stable, 5) : "—";
       document.getElementById("tUu").textContent = roots ? fmt(roots.unstable, 5) : "—";
-      document.getElementById("tU0").textContent = fmt(state.u0, 5);
+      document.getElementById("tU0").textContent = fmt(state.u0, 7);
       document.getElementById("tR0").textContent = fmt(1 / state.u0);
 
       const btnS = document.getElementById("btnStable");
@@ -575,6 +606,18 @@
     new ResizeObserver(resize).observe(wrap);
 
     // controls
+    const applyTyped = (el, apply) => {
+      const commit = () => {
+        const n = Number(el.value);
+        if (!Number.isFinite(n)) { syncUI(); return; }
+        apply(n);
+      };
+      el.addEventListener("change", commit);
+      el.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); el.blur(); }
+      });
+    };
+
     document.getElementById("mRange").addEventListener("input", (e) => {
       state.M = Number(e.target.value);
       state.preset = "custom";
@@ -591,10 +634,35 @@
       state.preset = "custom";
       reintegrate();
     });
+    applyTyped(document.getElementById("mVal"), (n) => {
+      state.M = clamp(n, 0.01, 50);
+      state.preset = "custom";
+      reintegrate();
+    });
+    applyTyped(document.getElementById("lVal"), (n) => {
+      state.L = clamp(n, 0.1, 100);
+      state.preset = "custom";
+      state.showIscoRing = false;
+      reintegrate();
+    });
+    applyTyped(document.getElementById("uVal"), (n) => {
+      state.u0 = clamp(n, 1e-6, 2);
+      state.preset = "custom";
+      reintegrate();
+    });
+
+    const perturbU0 = (sign) => {
+      state.u0 = clamp(state.u0 + sign * U_EPS, 1e-6, 2);
+      state.preset = "custom";
+      reintegrate();
+    };
+    document.getElementById("btnIn").addEventListener("click", () => perturbU0(1));
+    document.getElementById("btnOut").addEventListener("click", () => perturbU0(-1));
+
     document.getElementById("btnStable").addEventListener("click", () => {
       const roots = circularRoots(state.M, state.L);
       if (!roots || roots.unstable - roots.stable <= 1e-4) return;
-      state.u0 = roots.stable + U_EPS;
+      state.u0 = roots.stable;
       state.preset = "stable";
       state.showIscoRing = false;
       reintegrate();
