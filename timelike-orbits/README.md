@@ -4,7 +4,7 @@ Interactive 3D comparison of equatorial **timelike** orbits for a massive test p
 
 ## Run it
 
-**On GitHub Pages:** open [`timelike-orbits/`](https://iamfrutrated.github.io/kerr-black-hole/timelike-orbits/) (after deploy).
+**On GitHub Pages:** open [`timelike-orbits/`](https://iamfrutrated.github.io/kerr-black-hole/timelike-orbits/).
 
 ## Features
 
