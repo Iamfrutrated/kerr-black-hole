@@ -1,20 +1,10 @@
 # Timelike orbits (Newtonian vs GR)
 
-Interactive 3D comparison of equatorial **timelike** orbits for a massive test particle around a Schwarzschild black hole — Newtonian gravity versus general relativity — in the \(u(\phi)=1/r\) form from the *Timelike geodesics* notebook.
+Interactive 3D comparison of equatorial **timelike** orbits for a massive test particle around a Schwarzschild black hole — Newtonian gravity versus general relativity — in the \(u(\phi)=1/r\) form.
 
 ## Run it
 
 **On GitHub Pages:** open [`timelike-orbits/`](https://iamfrutrated.github.io/kerr-black-hole/timelike-orbits/) (after deploy).
-
-**Locally** from the repository root:
-
-```bash
-python3 -m http.server 8000
-```
-
-Then visit `http://localhost:8000/timelike-orbits/`.
-
-**In Cursor:** open [`newtonian-gr-orbits.canvas.tsx`](newtonian-gr-orbits.canvas.tsx) beside the chat.
 
 ## Features
 
