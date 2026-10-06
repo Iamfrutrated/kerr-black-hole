@@ -4,19 +4,23 @@ Interactive 3D model of a Kerr (spinning) black hole using the geodesic radii fr
 
 ## Run it
 
-**On GitHub Pages:** [https://iamfrutrated.github.io/kerr-black-hole/](https://iamfrutrated.github.io/kerr-black-hole/)
+[https://iamfrutrated.github.io/kerr-black-hole/](https://iamfrutrated.github.io/kerr-black-hole/)
 
-A `.canvas.tsx` file only runs inside Cursor. GitHub does not execute it. The live site is `index.html` in this repo.
+## Layout
 
-**Locally:** open `index.html` in a browser, or from this folder run:
+| Path | Role |
+| --- | --- |
+| `index.html` | Live GitHub Pages Kerr viewer |
+| `black-hole-shadow-sim/` | Kerr shadow / photon-sphere sources (`v1`, `v2`) |
+| `timelike-orbits/` | Newtonian vs GR timelike-orbit sim (HTML + Cursor canvas) |
 
-```bash
-python3 -m http.server 8000
-```
+### Timelike orbits
 
-Then visit `http://localhost:8000`.
+Compare equatorial massive-particle orbits under Newtonian gravity and Schwarzschild GR.
 
-**In Cursor:** open `kerr-black-hole.canvas.tsx` beside the chat.
+- **Browser:** [`timelike-orbits/index.html`](timelike-orbits/index.html) → `http://localhost:8000/timelike-orbits/`
+- **Cursor canvas:** [`timelike-orbits/newtonian-gr-orbits.canvas.tsx`](timelike-orbits/newtonian-gr-orbits.canvas.tsx)
+- **Equations:** [`timelike-orbits/docs/newtonian-gr-orbits.md`](timelike-orbits/docs/newtonian-gr-orbits.md)
 
 ## Surfaces
 

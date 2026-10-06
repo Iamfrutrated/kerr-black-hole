@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Timelike orbits — Newtonian vs GR</title>
+  <style>
+    :root {
+      --bg: #181818;
+      --chrome: #141414;
+      --text: #F0F0F0;
+      --text-2: #F0F0F0BD;
+      --text-3: #F0F0F099;
+      --fill-2: #F0F0F024;
+      --fill-3: #F0F0F014;
+      --stroke-1: #F0F0F033;
+      --stroke-2: #F0F0F01F;
+      --stroke-3: #F0F0F014;
+      --accent: #599CE7;
+      --cyan: #81A1C1;
+      --orange: #DD7F76;
+      --purple: #9386F2;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px 24px 48px; display: flex; flex-direction: column; gap: 20px; }
+    h1 { font-size: 24px; font-weight: 600; margin: 0; line-height: 1.25; }
+    h2 { font-size: 16px; font-weight: 600; margin: 0; }
+    h3 { font-size: 14px; font-weight: 600; margin: 0; }
+    p { margin: 0; }
+    .secondary { color: var(--text-2); }
+    .tertiary { color: var(--text-3); }
+    .small { font-size: 12px; }
+    .stack { display: flex; flex-direction: column; gap: 10px; }
+    .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .stats { display: flex; flex-wrap: wrap; gap: 12px; }
+    .stat { min-width: 140px; }
+    .stat b { display: block; font-size: 20px; font-weight: 600; line-height: 1.2; }
+    .stat span { display: block; font-size: 12px; color: var(--text-3); margin-top: 2px; }
+    .viewport {
+      position: relative;
+      height: 520px;
+      min-height: 520px;
+      border: 1px solid var(--stroke-3);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--bg);
+      cursor: grab;
+      touch-action: none;
+      overscroll-behavior: contain;
+      user-select: none;
+    }
+    .viewport.dragging { cursor: grabbing; }
+    canvas#scene { display: block; position: absolute; inset: 0; }
+    .hint { position: absolute; left: 12px; bottom: 12px; color: var(--text-3); font-size: 12px; pointer-events: none; }
+    .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
+    @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+    input[type="range"] { flex: 1; accent-color: var(--accent); margin: 0; }
+    .numbox {
+      width: 88px;
+      text-align: right;
+      font: inherit;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      color: var(--text);
+      background: var(--fill-3);
+      border: 1px solid var(--stroke-1);
+      border-radius: 6px;
+      padding: 4px 6px;
+    }
+    .numbox.wide { width: 108px; }
+    .numbox:focus { outline: none; border-color: var(--accent); }
+    .numbox::-webkit-outer-spin-button,
+    .numbox::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .numbox[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+    .lab { width: 28px; color: var(--text-2); }
+    .pill {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 5px 10px; border-radius: 999px; border: 1px solid var(--stroke-1);
+      background: var(--fill-3); color: var(--text); cursor: pointer; font: inherit;
+    }
+    .pill:hover { background: var(--fill-2); }
+    .pill.active { background: #599CE724; border-color: var(--accent); color: var(--accent); }
+    .pill.disabled { opacity: 0.4; cursor: not-allowed; }
+    .toggle {
+      width: 36px; height: 20px; border-radius: 999px; border: 1px solid var(--stroke-1);
+      background: var(--fill-3); position: relative; cursor: pointer; padding: 0;
+    }
+    .toggle[aria-checked="true"] { background: #599CE744; border-color: var(--accent); }
+    .toggle::after {
+      content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+      border-radius: 50%; background: var(--text-2); transition: left 0.12s ease;
+    }
+    .toggle[aria-checked="true"]::after { left: 18px; background: var(--accent); }
+    label.check { display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-2); }
+    .callout {
+      border: 1px solid var(--stroke-2); border-radius: 8px; padding: 12px 14px;
+      background: #599CE714;
+    }
+    .callout .title { font-weight: 600; margin-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--stroke-3); }
+    th { color: var(--text-3); font-weight: 600; font-size: 12px; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+    .card { border: 1px solid var(--stroke-3); border-radius: 8px; overflow: hidden; }
+    .card-header { padding: 10px 14px; background: var(--fill-3); font-weight: 600; }
+    .card-body { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+    a { color: var(--accent); }
+    .swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="stack" style="gap:6px">
+      <h1>Timelike orbits — Newtonian vs GR</h1>
+      <p class="secondary">
+        Equatorial massive-particle orbits in the Schwarzschild u(φ) = 1/r form. Blue is GR
+        (with the 3M u² correction); purple is Newtonian. Drag the 3D view; animate markers along
+        each trail. Units: G = c = 1.
+      </p>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><b id="sM">1.000</b><span>Mass M</span></div>
+      <div class="stat"><b id="sL">4.000</b><span>Angular momentum L</span></div>
+      <div class="stat"><b id="sU0">0.08333</b><span>Initial u₀ = 1/r</span></div>
+      <div class="stat"><b id="sR0">12.000</b><span>Initial r₀</span></div>
+    </div>
+
+    <div class="viewport" id="viewport">
+      <canvas id="scene"></canvas>
+      <div class="hint">Drag to orbit · scroll to zoom · geometrical units</div>
+    </div>
+
+    <div class="grid">
+      <div class="stack">
+        <h2>Parameters</h2>
+        <p class="small secondary">Set M and L first; circular-orbit u₀ presets update from those values.</p>
+        <div class="row">
+          <span class="lab">M</span>
+          <input type="range" id="mRange" min="0.2" max="5" step="0.01" value="1" aria-label="Mass M" />
+          <input class="numbox" type="number" id="mVal" min="0.01" max="50" step="0.01" value="1.00" aria-label="Mass M value" />
+        </div>
+        <div class="row">
+          <span class="lab">L</span>
+          <input type="range" id="lRange" min="0.5" max="20" step="0.01" value="4" aria-label="Specific angular momentum L" />
+          <input class="numbox" type="number" id="lVal" min="0.1" max="100" step="0.01" value="4.00" aria-label="Specific angular momentum L value" />
+        </div>
+        <div class="row">
+          <span class="lab">u₀</span>
+          <input type="range" id="uRange" min="0.01" max="0.5" step="0.000001" value="0.083334" aria-label="Initial reciprocal radius u0" />
+          <input class="numbox wide" type="number" id="uVal" min="0.000001" max="2" step="0.000001" value="0.083334" aria-label="Initial reciprocal radius u0 value" />
+        </div>
+        <div class="row" style="margin:2px 0 4px">
+          <button type="button" class="pill" id="btnIn">Perturb inwards</button>
+          <button type="button" class="pill" id="btnOut">Perturb outwards</button>
+        </div>
+        <p class="small tertiary">
+          Typed values apply on Enter or when the box loses focus. Perturb changes u₀ by ±10⁻⁶
+          (inwards = smaller r). On the unstable circular orbit that is enough to plunge or fly out;
+          on the stable orbit the path stays bound.
+        </p>
+
+        <h3 style="margin-top:8px">u₀ presets</h3>
+        <div class="row" id="presets" style="margin:4px 0 8px; gap:8px">
+          <button type="button" class="pill active" id="btnStable">Stable 0.0833</button>
+          <button type="button" class="pill" id="btnUnstable">Unstable 0.2500</button>
+          <button type="button" class="pill" id="btnIsco">ISCO 0.1667</button>
+        </div>
+        <p class="small tertiary">
+          Presets set the exact circular root. Use perturb afterwards to leave the circle.
+          ISCO sets L = 2√3 M and u₀ = 1/(6M), and shows the r = 6M ring.
+        </p>
+
+        <div class="row">
+          <span class="small">Animate particles</span>
+          <button type="button" class="toggle" id="togAnimate" role="switch" aria-checked="true" aria-label="Animate particles"></button>
+          <span class="small">Auto-rotate</span>
+          <button type="button" class="toggle" id="togRotate" role="switch" aria-checked="true" aria-label="Auto-rotate"></button>
+          <span class="small">Invert vertical drag</span>
+          <button type="button" class="toggle" id="togInvert" role="switch" aria-checked="false" aria-label="Invert vertical drag"></button>
+        </div>
+      </div>
+
+      <div class="stack">
+        <h2>Display</h2>
+        <label class="check"><input type="checkbox" id="chkGR" checked /> GR orbit (blue)</label>
+        <label class="check"><input type="checkbox" id="chkNewton" checked /> Newtonian orbit (purple)</label>
+        <label class="check"><input type="checkbox" id="chkHorizon" checked /> Event horizon r = 2M</label>
+        <label class="check"><input type="checkbox" id="chkIsco" /> ISCO ring r = 6M</label>
+        <div class="row">
+          <span class="swatch" style="background:var(--cyan)"></span><span class="small">GR</span>
+          <span class="swatch" style="background:var(--purple)"></span><span class="small">Newtonian</span>
+          <span class="swatch" style="background:var(--orange)"></span><span class="small">ISCO</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <div class="title">Same initial conditions, different force law</div>
+      <p class="small secondary">
+        Both integrations share M, L, u₀, and u′(0) = 0. GR adds +3M u² on the right-hand side,
+        which produces periapsis advance relative to the closed Newtonian ellipse.
+      </p>
+    </div>
+
+    <h2>Current values</h2>
+    <table>
+      <thead><tr><th>Quantity</th><th>Formula / note</th><th class="num">Value</th></tr></thead>
+      <tbody>
+        <tr><td>Horizon rh</td><td>2M</td><td class="num" id="tRh"></td></tr>
+        <tr><td>ISCO radius</td><td>6M</td><td class="num" id="tIscoR"></td></tr>
+        <tr><td>L_ISCO</td><td>2√3 M</td><td class="num" id="tIscoL"></td></tr>
+        <tr><td>u_stable</td><td>(1 − √(1 − 12M²/L²))/(6M)</td><td class="num" id="tUs"></td></tr>
+        <tr><td>u_unstable</td><td>(1 + √(1 − 12M²/L²))/(6M)</td><td class="num" id="tUu"></td></tr>
+        <tr><td>u₀</td><td>initial 1/r</td><td class="num" id="tU0"></td></tr>
+        <tr><td>r₀</td><td>1/u₀</td><td class="num" id="tR0"></td></tr>
+        <tr><td>φ range</td><td>notebook default</td><td class="num">0 … 20</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Orbit equations</h3>
+    <div class="card">
+      <div class="card-header">u(φ) = 1/r form (G = c = 1)</div>
+      <div class="card-body">
+        <p><code>GR: u'' + u = M/L² + 3 M u²</code></p>
+        <p><code>Newtonian: u'' + u = M/L²</code></p>
+        <p><code>u(0) = u₀, u'(0) = 0</code></p>
+        <p class="small secondary">
+          Defaults match the notebook: M = 1, L = 4, u₀ = 1/12 + 10⁻⁶.
+          See <a href="./docs/newtonian-gr-orbits.md">docs/newtonian-gr-orbits.md</a>.
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const PHI_MAX = 20;
+    const PHI_STEPS = 2400;
+    const U_EPS = 1e-6;
+    const REF_DIST = 28;
+    const FIT_RADIUS = 18;
+
+    const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+    const fmt = (n, d = 4) => (Number.isFinite(n) ? n.toFixed(d) : "—");
+    const lIsco = (M) => 2 * Math.sqrt(3) * M;
+    const uIsco = (M) => 1 / (6 * M);
+
+    function circularRoots(M, L) {
+      if (!(M > 0) || !(L > 0)) return null;
+      const disc = 1 - (12 * M * M) / (L * L);
+      if (disc < -1e-12) return null;
+      const s = Math.sqrt(Math.max(0, disc));
+      const den = 6 * M;
+      return { unstable: (1 + s) / den, stable: (1 - s) / den };
+    }
+
+    function integrateOrbit(M, L, u0, gr) {
+      const phi = [];
+      const xyz = [];
+      const h = PHI_MAX / PHI_STEPS;
+      const mOverL2 = M / (L * L);
+      const accel = (u) => mOverL2 + (gr ? 3 * M * u * u : 0) - u;
+      let u = u0;
+      let up = 0;
+      for (let i = 0; i <= PHI_STEPS; i++) {
+        const ph = i * h;
+        if (!(u > 1e-8) || u > 50) break;
+        const r = 1 / u;
+        if (r > 1e5) break;
+        phi.push(ph);
+        xyz.push({ x: Math.cos(ph) * r, y: Math.sin(ph) * r, z: 0 });
+        const k1u = up, k1p = accel(u);
+        const k2u = up + 0.5 * h * k1p, k2p = accel(u + 0.5 * h * k1u);
+        const k3u = up + 0.5 * h * k2p, k3p = accel(u + 0.5 * h * k2u);
+        const k4u = up + h * k3p, k4p = accel(u + h * k3u);
+        u += (h / 6) * (k1u + 2 * k2u + 2 * k3u + k4u);
+        up += (h / 6) * (k1p + 2 * k2p + 2 * k3p + k4p);
+      }
+      return { phi, xyz };
+    }
+
+    function ringPoints(r, n = 96) {
+      const pts = [];
+      for (let i = 0; i <= n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        pts.push({ x: r * Math.cos(a), y: r * Math.sin(a), z: 0 });
+      }
+      return pts;
+    }
+
+    function wireSphere(r) {
+      const lines = [];
+      for (let m = 0; m < 10; m++) {
+        const phi = (m / 10) * Math.PI * 2;
+        const pts = [];
+        for (let i = 0; i <= 32; i++) {
+          const th = (i / 32) * Math.PI;
+          pts.push({ x: r * Math.sin(th) * Math.cos(phi), y: r * Math.sin(th) * Math.sin(phi), z: r * Math.cos(th) });
+        }
+        lines.push(pts);
+      }
+      for (let p = 1; p < 6; p++) {
+        const th = (p / 6) * Math.PI;
+        const pts = [];
+        for (let i = 0; i <= 48; i++) {
+          const phi = (i / 48) * Math.PI * 2;
+          pts.push({ x: r * Math.sin(th) * Math.cos(phi), y: r * Math.sin(th) * Math.sin(phi), z: r * Math.cos(th) });
+        }
+        lines.push(pts);
+      }
+      return lines;
+    }
+
+    const state = {
+      M: 1,
+      L: 4,
+      u0: 1 / 12 + U_EPS,
+      preset: "stable",
+      showGR: true,
+      showNewton: true,
+      showHorizon: true,
+      showIscoRing: false,
+      animate: true,
+      autoRotate: true,
+      invertDrag: false,
+      gr: null,
+      newton: null,
+    };
+
+    function reintegrate() {
+      state.gr = integrateOrbit(state.M, state.L, state.u0, true);
+      state.newton = integrateOrbit(state.M, state.L, state.u0, false);
+      phase = 0;
+      dirty = true;
+      syncUI();
+    }
+
+    function setBox(id, value, digits) {
+      const el = document.getElementById(id);
+      if (document.activeElement === el) return;
+      el.value = value.toFixed(digits);
+    }
+
+    function syncUI() {
+      const roots = circularRoots(state.M, state.L);
+      const Ui = uIsco(state.M);
+      document.getElementById("mRange").value = state.M;
+      document.getElementById("lRange").value = state.L;
+      document.getElementById("uRange").value = state.u0;
+      setBox("mVal", state.M, 3);
+      setBox("lVal", state.L, 3);
+      setBox("uVal", state.u0, 7);
+      document.getElementById("sM").textContent = fmt(state.M, 3);
+      document.getElementById("sL").textContent = fmt(state.L, 3);
+      document.getElementById("sU0").textContent = fmt(state.u0, 7);
+      document.getElementById("sR0").textContent = fmt(1 / state.u0, 3);
+      document.getElementById("tRh").textContent = fmt(2 * state.M);
+      document.getElementById("tIscoR").textContent = fmt(6 * state.M);
+      document.getElementById("tIscoL").textContent = fmt(lIsco(state.M));
+      document.getElementById("tUs").textContent = roots ? fmt(roots.stable, 5) : "—";
+      document.getElementById("tUu").textContent = roots ? fmt(roots.unstable, 5) : "—";
+      document.getElementById("tU0").textContent = fmt(state.u0, 7);
+      document.getElementById("tR0").textContent = fmt(1 / state.u0);
+
+      const btnS = document.getElementById("btnStable");
+      const btnU = document.getElementById("btnUnstable");
+      const btnI = document.getElementById("btnIsco");
+      const distinct = roots && roots.unstable - roots.stable > 1e-4;
+      btnS.textContent = roots ? `Stable ${roots.stable.toFixed(4)}` : "Stable (none)";
+      btnU.textContent = roots ? `Unstable ${roots.unstable.toFixed(4)}` : "Unstable (none)";
+      btnI.textContent = `ISCO ${Ui.toFixed(4)}`;
+      btnS.classList.toggle("disabled", !distinct);
+      btnU.classList.toggle("disabled", !distinct);
+      btnS.classList.toggle("active", state.preset === "stable" && distinct);
+      btnU.classList.toggle("active", state.preset === "unstable" && distinct);
+      btnI.classList.toggle("active", state.preset === "isco");
+      document.getElementById("chkIsco").checked = state.showIscoRing || state.preset === "isco";
+    }
+
+    // ---- 3D canvas ----
+    const wrap = document.getElementById("viewport");
+    const canvas = document.getElementById("scene");
+    const ctx = canvas.getContext("2d");
+    const cam = { yaw: 0.55, pitch: 0.55, zoom: 1 };
+    let drag = null;
+    let phase = 0;
+    let dirty = true;
+    let w = 0, h = 0;
+
+    const screenScale = (zoom) => ((Math.min(w, h) * 0.44) / FIT_RADIUS) * zoom;
+
+    function makeTransform() {
+      const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+      const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+      const k = screenScale(cam.zoom);
+      const cx = w / 2, cz = h / 2;
+      return (p) => {
+        const x1 = p.x * cy - p.y * sy;
+        const y1 = p.x * sy + p.y * cy;
+        const d = y1 * cp - p.z * sp;
+        const z = y1 * sp + p.z * cp;
+        const persp = 1 / Math.max(0.72, 1 - 0.1 * (d / REF_DIST));
+        return { x: cx + x1 * k * persp, y: cz - z * k * persp, d };
+      };
+    }
+
+    function toCamera(p) {
+      const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+      const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+      const x1 = p.x * cy - p.y * sy;
+      const y1 = p.x * sy + p.y * cy;
+      return { x: x1, y: y1 * cp - p.z * sp, z: y1 * sp + p.z * cp };
+    }
+
+    function strokePolyline(pts, front, color, width, alpha) {
+      ctx.beginPath();
+      let open = false, any = false;
+      for (let i = 1; i < pts.length; i++) {
+        const p = pts[i - 1], q = pts[i];
+        if ((p.d + q.d >= 0) === front) {
+          if (!open) { ctx.moveTo(p.x, p.y); open = true; }
+          ctx.lineTo(q.x, q.y);
+          any = true;
+        } else open = false;
+      }
+      if (!any) return;
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    function drawGizmo() {
+      const cx = w - 58, cy = 58, radius = 28;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 46, 0, Math.PI * 2);
+      ctx.fillStyle = "var(--fill-3)";
+      ctx.fillStyle = "#F0F0F014";
+      ctx.fill();
+      ctx.strokeStyle = "#F0F0F014";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      const axes = [
+        { label: "X", vec: { x: 1, y: 0, z: 0 }, color: "#FC6B83" },
+        { label: "Y", vec: { x: 0, y: 1, z: 0 }, color: "#3FA266" },
+        { label: "Z", vec: { x: 0, y: 0, z: 1 }, color: "#7BAFE9" },
+      ].map((a) => {
+        const c = toCamera(a.vec);
+        return { ...a, x: c.x * radius, y: -c.z * radius, depth: c.y };
+      }).sort((u, v) => u.depth - v.depth);
+      ctx.font = "600 11px ui-sans-serif, system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      for (const axis of axes) {
+        const tx = cx + axis.x, ty = cy + axis.y;
+        const len = Math.hypot(axis.x, axis.y) || 1;
+        const nx = axis.x / len, ny = axis.y / len;
+        ctx.strokeStyle = axis.color;
+        ctx.globalAlpha = 0.35;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(cx - axis.x * 0.35, cy - axis.y * 0.35);
+        ctx.lineTo(cx, cy);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(tx - nx * 7, ty - ny * 7);
+        ctx.stroke();
+        ctx.fillStyle = axis.color;
+        ctx.beginPath();
+        ctx.moveTo(tx, ty);
+        ctx.lineTo(tx - nx * 7 - ny * 3.2, ty - ny * 7 + nx * 3.2);
+        ctx.lineTo(tx - nx * 7 + ny * 3.2, ty - ny * 7 - nx * 3.2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillText(axis.label, tx + nx * 10, ty + ny * 10);
+      }
+    }
+
+    function drawScene() {
+      const tf = makeTransform();
+      const k = screenScale(cam.zoom);
+      const rH = 2 * state.M;
+      const rIsco = 6 * state.M;
+      const horizonWires = wireSphere(rH).map((line) => line.map(tf));
+      const iscoRing = ringPoints(rIsco).map(tf);
+      const grPts = state.gr.xyz.map(tf);
+      const nePts = state.newton.xyz.map(tf);
+
+      const pass = (front) => {
+        if (state.showHorizon) {
+          for (const pts of horizonWires) strokePolyline(pts, front, "#F0F0F0BD", 1, front ? 0.55 : 0.25);
+        }
+        if (state.showNewton) strokePolyline(nePts, front, "#9386F2", 2.2, front ? 0.95 : 0.35);
+        if (state.showGR) strokePolyline(grPts, front, "#81A1C1", 2.4, front ? 0.95 : 0.35);
+        if (state.showIscoRing || state.preset === "isco") {
+          strokePolyline(iscoRing, front, "#DD7F76", 1.6, front ? 0.85 : 0.3);
+        }
+      };
+
+      const particleAt = (trail, color) => {
+        if (trail.xyz.length < 2) return null;
+        const t = ((phase % PHI_MAX) + PHI_MAX) % PHI_MAX;
+        const idx = Math.min(trail.xyz.length - 1, Math.max(0, Math.floor((t / PHI_MAX) * (trail.xyz.length - 1))));
+        return { p: tf(trail.xyz[idx]), color };
+      };
+      const dots = [];
+      if (state.animate) {
+        if (state.showGR) { const d = particleAt(state.gr, "#81A1C1"); if (d) dots.push(d); }
+        if (state.showNewton) { const d = particleAt(state.newton, "#9386F2"); if (d) dots.push(d); }
+      }
+      const drawDots = (front) => {
+        for (const { p, color } of dots) {
+          if ((p.d >= 0) !== front) continue;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+          ctx.fillStyle = color;
+          ctx.fill();
+          ctx.strokeStyle = "#141414";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      };
+
+      pass(false);
+      drawDots(false);
+      if (state.showHorizon) {
+        ctx.beginPath();
+        ctx.arc(w / 2, h / 2, rH * k, 0, Math.PI * 2);
+        ctx.fillStyle = "#141414";
+        ctx.fill();
+        ctx.globalAlpha = 0.5;
+        ctx.strokeStyle = "#F0F0F0BD";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      pass(true);
+      drawDots(true);
+      drawGizmo();
+    }
+
+    function resize() {
+      const rect = wrap.getBoundingClientRect();
+      w = Math.max(320, rect.width);
+      h = Math.max(360, rect.height);
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      dirty = true;
+    }
+
+    let last = performance.now();
+    function tick(now) {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      if (state.autoRotate && !drag) cam.yaw += dt * 0.18;
+      if (state.animate) phase += dt * 1.35;
+      if (state.autoRotate || state.animate || dirty || drag) {
+        dirty = false;
+        ctx.clearRect(0, 0, w, h);
+        drawScene();
+      }
+      requestAnimationFrame(tick);
+    }
+
+    wrap.addEventListener("pointerdown", (e) => {
+      wrap.setPointerCapture(e.pointerId);
+      drag = { x: e.clientX, y: e.clientY, yaw: cam.yaw, pitch: cam.pitch };
+      wrap.classList.add("dragging");
+    });
+    wrap.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      cam.yaw = drag.yaw + (e.clientX - drag.x) * 0.008;
+      const dy = (e.clientY - drag.y) * (state.invertDrag ? -1 : 1);
+      cam.pitch = clamp(drag.pitch + dy * 0.008, -1.2, 1.2);
+      dirty = true;
+    });
+    const endDrag = () => { drag = null; wrap.classList.remove("dragging"); };
+    wrap.addEventListener("pointerup", endDrag);
+    wrap.addEventListener("pointercancel", endDrag);
+    wrap.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      let dy = e.deltaY;
+      if (e.deltaMode === 1) dy *= 16;
+      if (e.deltaMode === 2) dy *= 40;
+      cam.zoom = clamp(cam.zoom * Math.exp(-dy * 0.0018), 0.25, 4);
+      dirty = true;
+    }, { passive: false });
+
+    new ResizeObserver(resize).observe(wrap);
+
+    // controls
+    const applyTyped = (el, apply) => {
+      const commit = () => {
+        const n = Number(el.value);
+        if (!Number.isFinite(n)) { syncUI(); return; }
+        apply(n);
+      };
+      el.addEventListener("change", commit);
+      el.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); el.blur(); }
+      });
+    };
+
+    document.getElementById("mRange").addEventListener("input", (e) => {
+      state.M = Number(e.target.value);
+      state.preset = "custom";
+      reintegrate();
+    });
+    document.getElementById("lRange").addEventListener("input", (e) => {
+      state.L = Number(e.target.value);
+      state.preset = "custom";
+      state.showIscoRing = false;
+      reintegrate();
+    });
+    document.getElementById("uRange").addEventListener("input", (e) => {
+      state.u0 = Number(e.target.value);
+      state.preset = "custom";
+      reintegrate();
+    });
+    applyTyped(document.getElementById("mVal"), (n) => {
+      state.M = clamp(n, 0.01, 50);
+      state.preset = "custom";
+      reintegrate();
+    });
+    applyTyped(document.getElementById("lVal"), (n) => {
+      state.L = clamp(n, 0.1, 100);
+      state.preset = "custom";
+      state.showIscoRing = false;
+      reintegrate();
+    });
+    applyTyped(document.getElementById("uVal"), (n) => {
+      state.u0 = clamp(n, 1e-6, 2);
+      state.preset = "custom";
+      reintegrate();
+    });
+
+    const perturbU0 = (sign) => {
+      state.u0 = clamp(state.u0 + sign * U_EPS, 1e-6, 2);
+      state.preset = "custom";
+      reintegrate();
+    };
+    document.getElementById("btnIn").addEventListener("click", () => perturbU0(1));
+    document.getElementById("btnOut").addEventListener("click", () => perturbU0(-1));
+
+    document.getElementById("btnStable").addEventListener("click", () => {
+      const roots = circularRoots(state.M, state.L);
+      if (!roots || roots.unstable - roots.stable <= 1e-4) return;
+      state.u0 = roots.stable;
+      state.preset = "stable";
+      state.showIscoRing = false;
+      reintegrate();
+    });
+    document.getElementById("btnUnstable").addEventListener("click", () => {
+      const roots = circularRoots(state.M, state.L);
+      if (!roots || roots.unstable - roots.stable <= 1e-4) return;
+      state.u0 = roots.unstable;
+      state.preset = "unstable";
+      state.showIscoRing = false;
+      reintegrate();
+    });
+    document.getElementById("btnIsco").addEventListener("click", () => {
+      state.L = lIsco(state.M);
+      state.u0 = uIsco(state.M);
+      state.preset = "isco";
+      state.showIscoRing = true;
+      reintegrate();
+    });
+
+    const bindToggle = (id, key) => {
+      const el = document.getElementById(id);
+      el.addEventListener("click", () => {
+        state[key] = !state[key];
+        el.setAttribute("aria-checked", String(state[key]));
+        dirty = true;
+      });
+    };
+    bindToggle("togAnimate", "animate");
+    bindToggle("togRotate", "autoRotate");
+    bindToggle("togInvert", "invertDrag");
+
+    document.getElementById("chkGR").addEventListener("change", (e) => { state.showGR = e.target.checked; dirty = true; });
+    document.getElementById("chkNewton").addEventListener("change", (e) => { state.showNewton = e.target.checked; dirty = true; });
+    document.getElementById("chkHorizon").addEventListener("change", (e) => { state.showHorizon = e.target.checked; dirty = true; });
+    document.getElementById("chkIsco").addEventListener("change", (e) => { state.showIscoRing = e.target.checked; dirty = true; });
+
+    resize();
+    reintegrate();
+    requestAnimationFrame(tick);
+  </script>
+</body>
+</html>
