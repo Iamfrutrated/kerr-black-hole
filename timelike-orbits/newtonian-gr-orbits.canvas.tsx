@@ -33,7 +33,16 @@ type Vec3 = { x: number; y: number; z: number };
 type Cam = { yaw: number; pitch: number; zoom: number };
 type Pt = { x: number; y: number; d: number };
 type Theme = ReturnType<typeof useHostTheme>;
-type OrbitTrail = { phi: number[]; xyz: Vec3[] };
+type Accel = (u: number) => number;
+type OrbitTrail = {
+  phi: number[];
+  xyz: Vec3[];
+  u: number;
+  up: number;
+  h: number;
+  accel: Accel;
+  done: boolean;
+};
 
 function clamp(v: number, lo: number, hi: number) {
   return Math.min(hi, Math.max(lo, v));
@@ -68,9 +77,33 @@ function near(a: number, b: number, tol = 2e-4) {
   return Math.abs(a - b) <= tol;
 }
 
+const TRAIL_MAX = 8000;
+const TRAIL_BEHIND = 48;
+
+function stepRK4(u: number, up: number, h: number, accel: Accel) {
+  const k1u = up;
+  const k1p = accel(u);
+  const k2u = up + 0.5 * h * k1p;
+  const k2p = accel(u + 0.5 * h * k1u);
+  const k3u = up + 0.5 * h * k2p;
+  const k3p = accel(u + 0.5 * h * k2u);
+  const k4u = up + h * k3p;
+  const k4p = accel(u + h * k3u);
+  return {
+    u: u + (h / 6) * (k1u + 2 * k2u + 2 * k3u + k4u),
+    up: up + (h / 6) * (k1p + 2 * k2p + 2 * k3p + k4p),
+  };
+}
+
+function validU(u: number) {
+  return u > 1e-8 && u < 50 && 1 / u < 1e5;
+}
+
 /**
  * RK4 for u'' = f(u). State y = [u, u'].
  * Stops early if u is non-positive or blows up (plunge / escape).
+ * The returned state continues past the initial φ window so the marker
+ * keeps moving instead of teleporting back to φ = 0.
  */
 function integrateOrbit(
   M: number,
@@ -82,34 +115,80 @@ function integrateOrbit(
   const xyz: Vec3[] = [];
   const h = PHI_MAX / PHI_STEPS;
   const mOverL2 = M / (L * L);
-
-  const accel = (u: number) => {
-    const rel = gr ? 3 * M * u * u : 0;
-    return mOverL2 + rel - u;
-  };
+  const accel: Accel = (u: number) => mOverL2 + (gr ? 3 * M * u * u : 0) - u;
 
   let u = u0;
   let up = 0;
+  let done = false;
   for (let i = 0; i <= PHI_STEPS; i++) {
+    if (!validU(u)) {
+      done = true;
+      break;
+    }
     const ph = i * h;
-    if (!(u > 1e-8) || u > 50) break;
     const r = 1 / u;
-    if (r > 1e5) break;
     phi.push(ph);
     xyz.push({ x: Math.cos(ph) * r, y: Math.sin(ph) * r, z: 0 });
-
-    const k1u = up;
-    const k1p = accel(u);
-    const k2u = up + 0.5 * h * k1p;
-    const k2p = accel(u + 0.5 * h * k1u);
-    const k3u = up + 0.5 * h * k2p;
-    const k3p = accel(u + 0.5 * h * k2u);
-    const k4u = up + h * k3p;
-    const k4p = accel(u + h * k3u);
-    u += (h / 6) * (k1u + 2 * k2u + 2 * k3u + k4u);
-    up += (h / 6) * (k1p + 2 * k2p + 2 * k3p + k4p);
+    const next = stepRK4(u, up, h, accel);
+    u = next.u;
+    up = next.up;
   }
-  return { phi, xyz };
+  return { phi, xyz, u, up, h, accel, done };
+}
+
+function extendOrbit(trail: OrbitTrail, targetPhi: number) {
+  if (trail.done || trail.phi.length === 0) return;
+  let guard = 0;
+  while (trail.phi[trail.phi.length - 1] + 1e-9 < targetPhi && guard++ < 4000) {
+    if (!validU(trail.u)) {
+      trail.done = true;
+      return;
+    }
+    const ph = trail.phi[trail.phi.length - 1] + trail.h;
+    const r = 1 / trail.u;
+    trail.phi.push(ph);
+    trail.xyz.push({ x: Math.cos(ph) * r, y: Math.sin(ph) * r, z: 0 });
+    const next = stepRK4(trail.u, trail.up, trail.h, trail.accel);
+    trail.u = next.u;
+    trail.up = next.up;
+  }
+}
+
+function trimTrail(trail: OrbitTrail, simPhi: number) {
+  if (trail.phi.length <= TRAIL_MAX) return;
+  const cutoff = simPhi - TRAIL_BEHIND;
+  let drop = 0;
+  const limit = trail.phi.length - 2;
+  while (drop < limit && trail.phi[drop] < cutoff) drop++;
+  if (drop > 0) {
+    trail.phi.splice(0, drop);
+    trail.xyz.splice(0, drop);
+  }
+}
+
+function positionAt(trail: OrbitTrail, simPhi: number): Vec3 | null {
+  const { phi, xyz } = trail;
+  const n = phi.length;
+  if (n === 0) return null;
+  if (n === 1 || simPhi <= phi[0]) return xyz[0];
+  const last = n - 1;
+  if (simPhi >= phi[last]) return xyz[last];
+  let lo = 0;
+  let hi = last;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (phi[mid] <= simPhi) lo = mid;
+    else hi = mid;
+  }
+  const span = phi[hi] - phi[lo] || 1;
+  const f = (simPhi - phi[lo]) / span;
+  const a = xyz[lo];
+  const b = xyz[hi];
+  return {
+    x: a.x + (b.x - a.x) * f,
+    y: a.y + (b.y - a.y) * f,
+    z: a.z + (b.z - a.z) * f,
+  };
 }
 
 function ringPoints(r: number, n = 96): Vec3[] {
@@ -267,13 +346,9 @@ function drawScene(
   };
 
   const particleAt = (trail: OrbitTrail, color: string) => {
-    if (trail.xyz.length < 2) return null;
-    const t = ((phase % PHI_MAX) + PHI_MAX) % PHI_MAX;
-    const idx = Math.min(
-      trail.xyz.length - 1,
-      Math.max(0, Math.floor((t / PHI_MAX) * (trail.xyz.length - 1))),
-    );
-    return { p: tf(trail.xyz[idx]), color };
+    const pos = positionAt(trail, phase);
+    if (!pos) return null;
+    return { p: tf(pos), color };
   };
 
   const dots: { p: Pt; color: string }[] = [];
@@ -499,7 +574,14 @@ function Viewport({
       const cam = camRef.current;
       const animating = (s.autoRotate && !dragRef.current) || s.animate;
       if (s.autoRotate && !dragRef.current) cam.yaw += dt * 0.18;
-      if (s.animate) phaseRef.current += dt * 1.35;
+      if (s.animate) {
+        phaseRef.current += dt * 1.35;
+        const ahead = phaseRef.current + 0.75;
+        extendOrbit(s.gr, ahead);
+        extendOrbit(s.newton, ahead);
+        trimTrail(s.gr, phaseRef.current);
+        trimTrail(s.newton, phaseRef.current);
+      }
       if (animating || dirtyRef.current) {
         dirtyRef.current = false;
         ctx.clearRect(0, 0, w, h);
